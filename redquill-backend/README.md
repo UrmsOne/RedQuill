@@ -45,6 +45,16 @@ redquill-backend/
 - Delete user: `DELETE /api/v1/user/:id` (JWT)
 - Login: `POST /api/v1/login` -> returns `{ token }`
 
+### LLM Model Management (JWT Required)
+
+- Create LLM model: `POST /api/v1/llm-model`
+- List LLM models: `GET /api/v1/llm-models` (with pagination/sort/search)
+- Get LLM model: `GET /api/v1/llm-model/:id`
+- Update LLM model: `PUT /api/v1/llm-model/:id`
+- Delete LLM model: `DELETE /api/v1/llm-model/:id`
+- Test LLM model: `POST /api/v1/llm-model/:id/test`
+- Use LLM model service: `POST /api/v1/llm-model/:id/service`
+
 ### Auth
 - JWT Bearer via `Authorization: Bearer <token>`
 - Env:

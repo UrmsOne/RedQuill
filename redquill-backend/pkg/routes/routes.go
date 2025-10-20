@@ -27,5 +27,15 @@ func Register(r *gin.Engine, cfg config.Config, mongoClient *mongo.Client) {
 		auth.GET("/user/:id", handlers.GetUsersHandler(mongoClient, cfg.DBName))
 		auth.PUT("/user/:id", handlers.PutUsersHandler(mongoClient, cfg.DBName))
 		auth.DELETE("/user/:id", handlers.DeleteUsersHandler(mongoClient, cfg.DBName))
+
+		// LLM models
+		auth.POST("/llm-model", handlers.PostLLMModelsHandler(mongoClient, cfg.DBName))
+		auth.GET("/llm-models", handlers.ListLLMModelsHandler(mongoClient, cfg.DBName))
+		auth.GET("/llm-model/:id", handlers.GetLLMModelsHandler(mongoClient, cfg.DBName))
+		auth.PUT("/llm-model/:id", handlers.PutLLMModelsHandler(mongoClient, cfg.DBName))
+		auth.DELETE("/llm-model/:id", handlers.DeleteLLMModelsHandler(mongoClient, cfg.DBName))
+		auth.POST("/llm-model/:id/test", handlers.TestLLMModelsHandler(mongoClient, cfg.DBName))
+		auth.POST("/llm-model/:id/service", handlers.ServiceLLMModelsHandler(mongoClient, cfg.DBName))
+
 	}
 }

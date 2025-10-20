@@ -56,6 +56,11 @@ services命名：
 /*/
 
 ```
+
+pkg/models文件夹下的文件命名规范：`xxx_model.go`
+pkg/services文件夹下的文件命名规范：`xxx_service.go`
+pkg/handlers：`xxx_handler.go`
+
 ### 新功能开发规范
 - 开发业务新功能时，需要提供上述给出的完整接口设计和实现。命名规范，代码规范遵守上述要求。
 - 通用组件开发时，命名规范，代码规范遵守上述要求，相关文件要放置到指定的文件夹下

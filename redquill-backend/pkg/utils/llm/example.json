@@ -1,0 +1,68 @@
+{
+  "default": "openai",
+  "providers": {
+    "openai": {
+      "provider": "openai",
+      "base_url": "https://api.openai.com/v1",
+      "api_key": "sk-xxx",
+      "model": "gpt-3.5-turbo",
+      "timeout": "30s",
+      "max_retries": 3,
+      "retry_delay": "1s"
+    },
+    "azure": {
+      "provider": "azure",
+      "base_url": "https://your-resource.openai.azure.com",
+      "api_key": "your-api-key",
+      "model": "gpt-35-turbo",
+      "timeout": "30s",
+      "max_retries": 3,
+      "retry_delay": "1s"
+    },
+    "ollama": {
+      "provider": "ollama",
+      "base_url": "http://localhost:11434",
+      "api_key": "",
+      "model": "llama2",
+      "timeout": "60s",
+      "max_retries": 3,
+      "retry_delay": "1s"
+    },
+    "deepseek": {
+      "provider": "deepseek",
+      "base_url": "https://api.deepseek.com",
+      "api_key": "sk-xxx",
+      "model": "deepseek-chat",
+      "timeout": "30s",
+      "max_retries": 3,
+      "retry_delay": "1s"
+    },
+    "doubao": {
+      "provider": "doubao",
+      "base_url": "https://ark.cn-beijing.volces.com",
+      "api_key": "your-api-key",
+      "model": "doubao-pro-32k",
+      "timeout": "30s",
+      "max_retries": 3,
+      "retry_delay": "1s"
+    },
+    "qwen": {
+      "provider": "qwen",
+      "base_url": "https://dashscope.aliyuncs.com",
+      "api_key": "sk-xxx",
+      "model": "qwen-turbo",
+      "timeout": "30s",
+      "max_retries": 3,
+      "retry_delay": "1s"
+    },
+    "wenxin": {
+      "provider": "wenxin",
+      "base_url": "https://aip.baidubce.com",
+      "api_key": "your-client-id",
+      "model": "your-client-secret",
+      "timeout": "30s",
+      "max_retries": 3,
+      "retry_delay": "1s"
+    }
+  }
+}
