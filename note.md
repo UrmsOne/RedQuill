@@ -6,6 +6,7 @@
 - 用户模型存放在pkg/models；业务逻辑在pkg/services；pkg/handlers为路由函数，主要作用为参数校验，权限控制等。pkg/routes为路由与路由函数的映射
 - 当开发新功能时，先生成models，在写对应的services、再写对应的handlers、再更新routes。
 - 中间件存放在pkg/middleware文件夹；pkg/config配置文件相关；pkg/common存放公共功能的代码；pkg/cmd为入口文件
+- post/put方法的请求和响应的结构体，可以在models/xxx_model.go里面定义
 
 ### 接口设计规范
 案例如下：

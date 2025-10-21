@@ -36,6 +36,13 @@ func Register(r *gin.Engine, cfg config.Config, mongoClient *mongo.Client) {
 		auth.DELETE("/llm-model/:id", handlers.DeleteLLMModelsHandler(mongoClient, cfg.DBName))
 		auth.POST("/llm-model/:id/test", handlers.TestLLMModelsHandler(mongoClient, cfg.DBName))
 		auth.POST("/llm-model/:id/service", handlers.ServiceLLMModelsHandler(mongoClient, cfg.DBName))
+		
+		// Prompts
+		auth.POST("/prompt", handlers.PostPromptsHandler(mongoClient, cfg.DBName))
+		auth.GET("/prompts", handlers.ListPromptsHandler(mongoClient, cfg.DBName))
+		auth.GET("/prompt/:id", handlers.GetPromptsHandler(mongoClient, cfg.DBName))
+		auth.PUT("/prompt/:id", handlers.PutPromptsHandler(mongoClient, cfg.DBName))
+		auth.DELETE("/prompt/:id", handlers.DeletePromptsHandler(mongoClient, cfg.DBName))
 
 	}
 }

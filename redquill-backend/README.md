@@ -55,6 +55,14 @@ redquill-backend/
 - Test LLM model: `POST /api/v1/llm-model/:id/test`
 - Use LLM model service: `POST /api/v1/llm-model/:id/service`
 
+### Prompt Management (JWT Required)
+
+- Create prompt: `POST /api/v1/prompt`
+- List prompts: `GET /api/v1/prompts` (with pagination/sort/search)
+- Get prompt: `GET /api/v1/prompt/:id`
+- Update prompt: `PUT /api/v1/prompt/:id`
+- Delete prompt: `DELETE /api/v1/prompt/:id`
+
 ### Auth
 - JWT Bearer via `Authorization: Bearer <token>`
 - Env:
