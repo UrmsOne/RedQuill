@@ -40,13 +40,13 @@ func NewLLMModelService(client *mongo.Client, dbName string) *LLMModelService {
 // PostLLMModels 创建LLM模型
 func (s *LLMModelService) PostLLMModels(ctx context.Context, name, modelID, displayName, description string, capabilities []string, temperatureRange []float64, costPerToken float64, status string, config models.LLMModelConfig, creatorID, creator string) (models.LLMModel, error) {
 	coll := s.client.Database(s.dbName).Collection("llm_models")
-	
+
 	// 检查模型名称是否已存在
 	var existing models.LLMModel
 	if err := coll.FindOne(ctx, bson.M{"name": name}).Decode(&existing); err == nil {
 		return models.LLMModel{}, errors.New("model name already exists")
 	}
-	
+
 	now := time.Now()
 	llmModel := models.LLMModel{
 		Name:             name,
@@ -64,16 +64,16 @@ func (s *LLMModelService) PostLLMModels(ctx context.Context, name, modelID, disp
 		CreatorID:        creatorID,
 		Creator:          creator,
 	}
-	
+
 	res, err := coll.InsertOne(ctx, llmModel)
 	if err != nil {
 		return models.LLMModel{}, err
 	}
-	
+
 	if oid, ok := res.InsertedID.(primitive.ObjectID); ok {
 		llmModel.ID = oid.Hex()
 	}
-	
+
 	return llmModel, nil
 }
 
@@ -84,12 +84,12 @@ func (s *LLMModelService) GetLLMModels(ctx context.Context, id string) (models.L
 	if err != nil {
 		return models.LLMModel{}, errors.New("invalid id")
 	}
-	
+
 	var llmModel models.LLMModel
 	if err := coll.FindOne(ctx, bson.M{"_id": oid}).Decode(&llmModel); err != nil {
 		return models.LLMModel{}, err
 	}
-	
+
 	return llmModel, nil
 }
 
@@ -100,10 +100,10 @@ func (s *LLMModelService) PutLLMModels(ctx context.Context, id string, name *str
 	if err != nil {
 		return models.LLMModel{}, errors.New("invalid id")
 	}
-	
+
 	update := bson.M{"mtime": time.Now().Unix()}
 	set := bson.M{}
-	
+
 	if name != nil {
 		set["name"] = *name
 	}
@@ -131,17 +131,17 @@ func (s *LLMModelService) PutLLMModels(ctx context.Context, id string, name *str
 	if config != nil {
 		set["config"] = *config
 	}
-	
+
 	for k, v := range set {
 		update[k] = v
 	}
-	
+
 	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
 	var out models.LLMModel
 	if err := coll.FindOneAndUpdate(ctx, bson.M{"_id": oid}, bson.M{"$set": update}, opts).Decode(&out); err != nil {
 		return models.LLMModel{}, err
 	}
-	
+
 	return out, nil
 }
 
@@ -152,7 +152,7 @@ func (s *LLMModelService) DeleteLLMModels(ctx context.Context, id string) error 
 	if err != nil {
 		return errors.New("invalid id")
 	}
-	
+
 	_, err = coll.DeleteOne(ctx, bson.M{"_id": oid})
 	return err
 }
@@ -160,25 +160,25 @@ func (s *LLMModelService) DeleteLLMModels(ctx context.Context, id string) error 
 // ListLLMModels 分页查询LLM模型列表
 func (s *LLMModelService) ListLLMModels(ctx context.Context, page, pageSize int64, sortExpr, keyword string) (PagedLLMModels, error) {
 	coll := s.client.Database(s.dbName).Collection("llm_models")
-	
+
 	// 构建过滤条件
 	kwFilter := common.BuildKeywordFilter(keyword, []string{"name", "display_name", "description"})
 	filter := common.MergeFilters(bson.M{}, kwFilter)
-	
+
 	// 构建选项
 	sort := common.BuildSort(sortExpr)
 	opts := common.BuildFindOptions(page, pageSize, sort, bson.M{})
-	
+
 	items, total, err := common.FindWithPagination[models.LLMModel](ctx, coll, filter, opts)
 	if err != nil {
 		return PagedLLMModels{}, err
 	}
-	
+
 	totalPages := total / common.NormalizePageSize(pageSize)
 	if total%common.NormalizePageSize(pageSize) != 0 {
 		totalPages++
 	}
-	
+
 	return PagedLLMModels{
 		Items: items,
 		Pagination: common.Pagination{
@@ -218,7 +218,7 @@ func (s *LLMModelService) TestLLMModel(ctx context.Context, id string, req model
 			Error:   err.Error(),
 		}, nil
 	}
-	
+
 	// 检查模型状态
 	if llmModel.Status != "active" {
 		return models.LLMModelTestResponse{
@@ -227,16 +227,16 @@ func (s *LLMModelService) TestLLMModel(ctx context.Context, id string, req model
 			Error:   "Model status is not active",
 		}, nil
 	}
-	
+
 	// 创建LLM客户端
 	llmConfig := llm.LLMConfig{
-		Provider:   llmModel.Config.Provider,
-		BaseURL:    llmModel.Config.BaseURL,
-		APIKey:     llmModel.Config.APIKey,
-		Model:      llmModel.Config.ModelName,
-		Timeout:    time.Duration(llmModel.Config.Timeout) * time.Second,
+		Provider: llmModel.Config.Provider,
+		BaseURL:  llmModel.Config.BaseURL,
+		APIKey:   llmModel.Config.APIKey,
+		Model:    llmModel.Config.ModelName,
+		Timeout:  time.Duration(llmModel.Config.Timeout) * time.Second,
 	}
-	
+
 	client, err := llm.NewClient(llmConfig)
 	if err != nil {
 		return models.LLMModelTestResponse{
@@ -245,7 +245,7 @@ func (s *LLMModelService) TestLLMModel(ctx context.Context, id string, req model
 			Error:   err.Error(),
 		}, nil
 	}
-	
+
 	// 转换消息格式
 	messages := make([]llm.Message, len(req.Messages))
 	for i, msg := range req.Messages {
@@ -254,7 +254,7 @@ func (s *LLMModelService) TestLLMModel(ctx context.Context, id string, req model
 			Content: msg.Content,
 		}
 	}
-	
+
 	// 执行测试
 	chatReq := llm.ChatRequest{
 		Model:       llmModel.Config.ModelName,
@@ -263,62 +263,27 @@ func (s *LLMModelService) TestLLMModel(ctx context.Context, id string, req model
 		Temperature: llmModel.Config.Temperature,
 		MaxTokens:   llmModel.Config.MaxTokens,
 	}
-	
-	if req.Stream {
-		// 流式测试
-		stream, err := client.ChatStream(ctx, chatReq)
-		if err != nil {
-			return models.LLMModelTestResponse{
-				Success: false,
-				Message: "Stream test failed",
-				Error:   err.Error(),
-			}, nil
-		}
-		
-		var response string
-		for chunk := range stream {
-			if chunk.Error != nil {
-				return models.LLMModelTestResponse{
-					Success: false,
-					Message: "Stream test error",
-					Error:   chunk.Error.Error(),
-				}, nil
-			}
-			
-			for _, choice := range chunk.Choices {
-				if choice.Delta.Content != "" {
-					response += choice.Delta.Content
-				}
-			}
-		}
-		
+
+	// 同步测试
+	resp, err := client.Chat(ctx, chatReq)
+	if err != nil {
 		return models.LLMModelTestResponse{
-			Success: true,
-			Message: "Stream test successful",
-			Data:    response,
-		}, nil
-	} else {
-		// 同步测试
-		resp, err := client.Chat(ctx, chatReq)
-		if err != nil {
-			return models.LLMModelTestResponse{
-				Success: false,
-				Message: "Chat test failed",
-				Error:   err.Error(),
-			}, nil
-		}
-		
-		var response string
-		if len(resp.Choices) > 0 {
-			response = resp.Choices[0].Message.Content
-		}
-		
-		return models.LLMModelTestResponse{
-			Success: true,
-			Message: "Chat test successful",
-			Data:    response,
+			Success: false,
+			Message: "Chat test failed",
+			Error:   err.Error(),
 		}, nil
 	}
+
+	var response string
+	if len(resp.Choices) > 0 {
+		response = resp.Choices[0].Message.Content
+	}
+
+	return models.LLMModelTestResponse{
+		Success: true,
+		Message: "Chat test successful",
+		Data:    response,
+	}, nil
 }
 
 // ServiceLLMModel 使用LLM模型提供服务
@@ -332,7 +297,7 @@ func (s *LLMModelService) ServiceLLMModel(ctx context.Context, id string, req mo
 			Error:   err.Error(),
 		}, nil
 	}
-	
+
 	// 检查模型状态
 	if llmModel.Status != "active" {
 		return models.LLMModelServiceResponse{
@@ -341,16 +306,16 @@ func (s *LLMModelService) ServiceLLMModel(ctx context.Context, id string, req mo
 			Error:   "Model status is not active",
 		}, nil
 	}
-	
+
 	// 创建LLM客户端
 	llmConfig := llm.LLMConfig{
-		Provider:   llmModel.Config.Provider,
-		BaseURL:    llmModel.Config.BaseURL,
-		APIKey:     llmModel.Config.APIKey,
-		Model:      llmModel.Config.ModelName,
-		Timeout:    time.Duration(llmModel.Config.Timeout) * time.Second,
+		Provider: llmModel.Config.Provider,
+		BaseURL:  llmModel.Config.BaseURL,
+		APIKey:   llmModel.Config.APIKey,
+		Model:    llmModel.Config.ModelName,
+		Timeout:  time.Duration(llmModel.Config.Timeout) * time.Second,
 	}
-	
+
 	client, err := llm.NewClient(llmConfig)
 	if err != nil {
 		return models.LLMModelServiceResponse{
@@ -359,7 +324,7 @@ func (s *LLMModelService) ServiceLLMModel(ctx context.Context, id string, req mo
 			Error:   err.Error(),
 		}, nil
 	}
-	
+
 	// 转换消息格式
 	messages := make([]llm.Message, len(req.Messages))
 	for i, msg := range req.Messages {
@@ -368,7 +333,7 @@ func (s *LLMModelService) ServiceLLMModel(ctx context.Context, id string, req mo
 			Content: msg.Content,
 		}
 	}
-	
+
 	// 执行服务调用
 	chatReq := llm.ChatRequest{
 		Model:       llmModel.Config.ModelName,
@@ -377,10 +342,10 @@ func (s *LLMModelService) ServiceLLMModel(ctx context.Context, id string, req mo
 		Temperature: llmModel.Config.Temperature,
 		MaxTokens:   llmModel.Config.MaxTokens,
 	}
-	
+
 	var response string
 	var tokenCount int64
-	
+
 	if req.Stream {
 		// 流式服务调用
 		stream, err := client.ChatStream(ctx, chatReq)
@@ -391,7 +356,7 @@ func (s *LLMModelService) ServiceLLMModel(ctx context.Context, id string, req mo
 				Error:   err.Error(),
 			}, nil
 		}
-		
+
 		for chunk := range stream {
 			if chunk.Error != nil {
 				return models.LLMModelServiceResponse{
@@ -400,13 +365,13 @@ func (s *LLMModelService) ServiceLLMModel(ctx context.Context, id string, req mo
 					Error:   chunk.Error.Error(),
 				}, nil
 			}
-			
+
 			for _, choice := range chunk.Choices {
 				if choice.Delta.Content != "" {
 					response += choice.Delta.Content
 				}
 			}
-			
+
 			// 统计token使用量
 			if chunk.Usage != nil {
 				tokenCount += chunk.Usage.TotalTokens
@@ -422,17 +387,17 @@ func (s *LLMModelService) ServiceLLMModel(ctx context.Context, id string, req mo
 				Error:   err.Error(),
 			}, nil
 		}
-		
+
 		if len(resp.Choices) > 0 {
 			response = resp.Choices[0].Message.Content
 		}
-		
+
 		// 统计token使用量
 		if resp.Usage != nil {
 			tokenCount = resp.Usage.TotalTokens
 		}
 	}
-	
+
 	// 更新模型使用次数
 	coll := s.client.Database(s.dbName).Collection("llm_models")
 	oid, _ := primitive.ObjectIDFromHex(id)
@@ -440,12 +405,12 @@ func (s *LLMModelService) ServiceLLMModel(ctx context.Context, id string, req mo
 		"$inc": bson.M{"usage_count": 1},
 		"$set": bson.M{"mtime": time.Now().Unix()},
 	})
-	
+
 	if err != nil {
 		// 记录错误但不影响服务响应
 		// 可以考虑添加日志记录
 	}
-	
+
 	return models.LLMModelServiceResponse{
 		Success:    true,
 		Message:    "Service call successful",
@@ -453,4 +418,106 @@ func (s *LLMModelService) ServiceLLMModel(ctx context.Context, id string, req mo
 		UsageCount: llmModel.UsageCount + 1,
 		TokenCount: tokenCount,
 	}, nil
+}
+
+// TestLLMModelStream 流式测试LLM模型
+func (s *LLMModelService) TestLLMModelStream(ctx context.Context, id string, req models.LLMModelTestRequest) (<-chan models.StreamChunk, error) {
+	// 获取模型信息
+	llmModel, err := s.GetLLMModels(ctx, id)
+	if err != nil {
+		ch := make(chan models.StreamChunk, 1)
+		ch <- models.StreamChunk{Error: err}
+		close(ch)
+		return ch, nil
+	}
+
+	// 检查模型状态
+	if llmModel.Status != "active" {
+		ch := make(chan models.StreamChunk, 1)
+		ch <- models.StreamChunk{Error: errors.New("model is not active")}
+		close(ch)
+		return ch, nil
+	}
+
+	// 创建LLM客户端
+	llmConfig := llm.LLMConfig{
+		Provider: llmModel.Config.Provider,
+		BaseURL:  llmModel.Config.BaseURL,
+		APIKey:   llmModel.Config.APIKey,
+		Model:    llmModel.Config.ModelName,
+		Timeout:  time.Duration(llmModel.Config.Timeout) * time.Second,
+	}
+
+	client, err := llm.NewClient(llmConfig)
+	if err != nil {
+		ch := make(chan models.StreamChunk, 1)
+		ch <- models.StreamChunk{Error: err}
+		close(ch)
+		return ch, nil
+	}
+
+	// 转换消息格式
+	messages := make([]llm.Message, len(req.Messages))
+	for i, msg := range req.Messages {
+		messages[i] = llm.Message{
+			Role:    msg.Role,
+			Content: msg.Content,
+		}
+	}
+
+	// 执行流式测试
+	chatReq := llm.ChatRequest{
+		Model:       llmModel.Config.ModelName,
+		Messages:    messages,
+		Stream:      true,
+		Temperature: llmModel.Config.Temperature,
+		MaxTokens:   llmModel.Config.MaxTokens,
+	}
+
+	stream, err := client.ChatStream(ctx, chatReq)
+	if err != nil {
+		ch := make(chan models.StreamChunk, 1)
+		ch <- models.StreamChunk{Error: err}
+		close(ch)
+		return ch, nil
+	}
+
+	// 转换流式响应
+	result := make(chan models.StreamChunk, 1000)
+	go func() {
+		defer close(result)
+
+		for chunk := range stream {
+			if chunk.Error != nil {
+				result <- models.StreamChunk{Error: chunk.Error}
+				return
+			}
+
+			// 提取内容
+			content := ""
+			for _, choice := range chunk.Choices {
+				if choice.Delta.Content != "" {
+					content += choice.Delta.Content
+				}
+			}
+
+			if content != "" {
+				result <- models.StreamChunk{
+					Content: content,
+					Done:    false,
+				}
+			}
+
+			// 检查是否完成
+			if len(chunk.Choices) > 0 && chunk.Choices[0].FinishReason != "" {
+				result <- models.StreamChunk{
+					Content: "",
+					Done:    true,
+				}
+				return
+			}
+		}
+	}()
+
+	return result, nil
 }

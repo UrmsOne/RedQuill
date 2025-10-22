@@ -114,6 +114,17 @@ func NewClient(config LLMConfig) (*Client, error) {
 			MaxRetries: config.MaxRetries,
 			RetryDelay: int(config.RetryDelay.Seconds()),
 		}, client)
+	case "mock":
+		provider = providers.NewMockProvider(providers.LLMConfig{
+			Provider:   config.Provider,
+			BaseURL:    config.BaseURL,
+			APIKey:     config.APIKey,
+			Model:      config.Model,
+			Headers:    config.Headers,
+			Timeout:    int(config.Timeout.Seconds()),
+			MaxRetries: config.MaxRetries,
+			RetryDelay: int(config.RetryDelay.Seconds()),
+		}, client)
 	default:
 		return nil, &LLMError{
 			Type:    string(ErrorTypeInvalidRequest),

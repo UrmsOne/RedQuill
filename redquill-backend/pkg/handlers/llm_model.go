@@ -176,6 +176,44 @@ func TestLLMModelsHandler(client *mongo.Client, dbName string) gin.HandlerFunc {
 			Stream:   req.Stream,
 		}
 
+		// 如果请求流式响应
+		if req.Stream {
+			// 设置SSE响应头
+			c.Header("Content-Type", "text/event-stream")
+			c.Header("Cache-Control", "no-cache")
+			c.Header("Connection", "keep-alive")
+			c.Header("Access-Control-Allow-Origin", "*")
+			c.Header("Access-Control-Allow-Headers", "Cache-Control")
+
+			// 调用流式测试
+			stream, err := services.NewLLMModelService(client, dbName).TestLLMModelStream(c.Request.Context(), id, testReq)
+			if err != nil {
+				c.SSEvent("error", gin.H{"error": err.Error()})
+				return
+			}
+
+			// 发送流式数据
+			for chunk := range stream {
+				if chunk.Error != nil {
+					c.SSEvent("error", gin.H{"error": chunk.Error.Error()})
+					return
+				}
+
+				// 发送数据块
+				c.SSEvent("data", gin.H{
+					"content": chunk.Content,
+					"done":    chunk.Done,
+				})
+				c.Writer.Flush()
+
+				if chunk.Done {
+					break
+				}
+			}
+			return
+		}
+
+		// 普通响应
 		result, err := services.NewLLMModelService(client, dbName).TestLLMModel(c.Request.Context(), id, testReq)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

@@ -1,5 +1,42 @@
 # 开发笔记记录常见问题
 ## 前端
+### 开发指南
+### 添加新页面
+
+1. 在 `src/views/` 创建 Vue 组件
+2. 在 `src/router/index.ts` 添加路由
+3. 在 `src/components/Layout.vue` 添加导航菜单
+
+### 添加新 API
+
+1. 在 `src/utils/api.ts` 添加 API 方法
+2. 在对应的 store 中添加状态管理
+3. 在组件中调用 API
+
+### 状态管理
+
+使用 Pinia 进行状态管理：
+
+```typescript
+// stores/example.ts
+import { defineStore } from 'pinia'
+
+export const useExampleStore = defineStore('example', () => {
+  const data = ref([])
+  const loading = ref(false)
+  
+  const fetchData = async () => {
+    // 获取数据逻辑
+  }
+  
+  return {
+    data,
+    loading,
+    fetchData
+  }
+})
+```
+
 
 ## 后端
 - 后端满足restful风格的设计，每种用户资源（数据模型），默认有两个属性参数，ctime(创建时间)、mtime(修改时间)；ctime和mtime为时间戳；

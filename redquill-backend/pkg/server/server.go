@@ -8,6 +8,7 @@ import (
 	"redquill-backend/pkg/config"
 	"redquill-backend/pkg/middleware"
 	"redquill-backend/pkg/routes"
+	"redquill-backend/pkg/services"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -29,6 +30,11 @@ func NewHTTPServer(cfg config.Config, mongoClient *mongo.Client) *HTTPServer {
 	engine.Use(middleware.RequestID())
 	engine.Use(gin.Logger())
 
+	// 初始化Prompt模板
+	if err := services.InitializePromptTemplates(mongoClient, cfg.DBName); err != nil {
+		log.Fatal("Failed to initialize prompt templates:", err)
+	}
+
 	routes.Register(engine, cfg, mongoClient)
 
 	hs := &HTTPServer{
@@ -37,9 +43,9 @@ func NewHTTPServer(cfg config.Config, mongoClient *mongo.Client) *HTTPServer {
 	hs.server = &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.HTTPPort),
 		Handler:           engine,
-		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      15 * time.Second,
-		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      0, // 禁用写超时，允许流式响应
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 	return hs
 }

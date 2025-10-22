@@ -74,3 +74,10 @@ type LLMModelServiceResponse struct {
 	UsageCount  int64  `json:"usage_count,omitempty"` // 当前模型使用次数
 	TokenCount  int64  `json:"token_count,omitempty"` // 本次调用消耗的token数
 }
+
+// StreamChunk 流式数据块
+type StreamChunk struct {
+	Content string `json:"content"`
+	Done    bool   `json:"done"`
+	Error   error  `json:"error,omitempty"`
+}
