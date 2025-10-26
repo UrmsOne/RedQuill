@@ -11,8 +11,10 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"go.mongodb.org/mongo-driver/mongo"
 	"redquill-backend/pkg/models"
+	"strings"
 )
 
 // NovelGenerationService 小说生成服务
@@ -235,6 +237,221 @@ func (s *NovelGenerationService) GenerateCharacter(ctx context.Context, novelID,
 	return character, nil
 }
 
+// GenerateCharactersFromOutline 根据大纲批量生成角色
+func (s *NovelGenerationService) GenerateCharactersFromOutline(ctx context.Context, novelID, llmModelID, outlineID string, userRequirements string) ([]models.Character, error) {
+	// 1. 获取大纲数据
+	novelService := NewNovelService(s.client, s.dbName)
+	outline, err := novelService.GetOutline(ctx, outlineID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. 获取故事核心和世界观
+	storyCores, err := novelService.GetStoryCores(ctx, novelID)
+	if err != nil || len(storyCores) == 0 {
+		return nil, errors.New("no story core found")
+	}
+
+	worldview, err := novelService.GetWorldviews(ctx, novelID)
+	if err != nil {
+		return nil, errors.New("no worldview found")
+	}
+
+	// 3. 构建输入数据
+	generationReq := models.GenerationRequest{
+		NovelID:    novelID,
+		LLMModelID: llmModelID,
+		InputData: map[string]interface{}{
+			"outline_content":   s.buildOutlineContent(outline),
+			"story_core":        s.buildStoryCoreContent(storyCores[0]),
+			"worldview":         s.buildWorldviewContent(worldview),
+			"user_requirements": userRequirements,
+		},
+		TemplateType: "batch_character",
+		Stream:       false,
+	}
+
+	// 4. 调用LLM生成
+	templateService := NewPromptTemplateService(s.client, s.dbName)
+	response, err := templateService.GenerateWithLLM(ctx, generationReq)
+	if err != nil {
+		return nil, err
+	}
+
+	if !response.Success {
+		return nil, errors.New(response.Error)
+	}
+
+	// 5. 解析响应数据
+	charactersData, ok := response.Data["characters"].([]interface{})
+	if !ok {
+		return nil, errors.New("invalid characters data format")
+	}
+
+	// 6. 解析并保存角色
+	var characters []models.Character
+	for _, charData := range charactersData {
+		charMap, ok := charData.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		character := s.parseCharacterFromMap(charMap)
+		character.NovelID = novelID
+
+		// 保存到数据库
+		savedChar, err := novelService.PostCharacters(
+			ctx,
+			novelID,
+			character.Name,
+			character.Type,
+			character.CoreAttributes,
+			character.SoulProfile,
+		)
+		if err != nil {
+			// 记录错误但继续处理其他角色
+			continue
+		}
+		characters = append(characters, savedChar)
+	}
+
+	// 7. 保存ExtraInfo
+	extraInfo := map[string]interface{}{
+		"generation_time": response.Data["generation_time"],
+		"token_count":     response.TokenCount,
+		"usage_count":     response.UsageCount,
+		"raw_response":    response.Data,
+		"outline_id":      outlineID,
+		"character_count": len(characters),
+	}
+	if err := novelService.UpdateNovelExtraInfo(ctx, novelID, "batch_character", extraInfo); err != nil {
+		// 记录错误但不影响主流程
+	}
+
+	return characters, nil
+}
+
+// buildOutlineContent 构建大纲内容文本
+func (s *NovelGenerationService) buildOutlineContent(outline models.Outline) string {
+	content := fmt.Sprintf("标题：%s\n概要：%s\n", outline.Title, outline.Summary)
+
+	if len(outline.KeyThemes) > 0 {
+		content += fmt.Sprintf("关键主题：%s\n", strings.Join(outline.KeyThemes, "、"))
+	}
+
+	if len(outline.StoryArcs) > 0 {
+		content += "故事弧线：\n"
+		for _, arc := range outline.StoryArcs {
+			content += fmt.Sprintf("- %s（第%d-%d章）：%s\n", arc.Name, arc.StartChapter, arc.EndChapter, arc.Description)
+		}
+	}
+
+	if len(outline.Chapters) > 0 {
+		content += "章节信息：\n"
+		for _, chapter := range outline.Chapters {
+			content += fmt.Sprintf("第%d章 %s：%s\n", chapter.ChapterNumber, chapter.Title, chapter.Summary)
+			if len(chapter.Characters) > 0 {
+				content += fmt.Sprintf("  涉及角色：%s\n", strings.Join(chapter.Characters, "、"))
+			}
+		}
+	}
+
+	return content
+}
+
+// buildStoryCoreContent 构建故事核心内容文本
+func (s *NovelGenerationService) buildStoryCoreContent(storyCore models.StoryCore) string {
+	return fmt.Sprintf(`标题：%s
+核心冲突：%s
+主题：%s
+创新点：%s
+商业潜力：%s
+目标受众：%s`,
+		storyCore.Title,
+		storyCore.CoreConflict,
+		storyCore.Theme,
+		storyCore.Innovation,
+		storyCore.CommercialPotential,
+		storyCore.TargetAudience,
+	)
+}
+
+// buildWorldviewContent 构建世界观内容文本
+func (s *NovelGenerationService) buildWorldviewContent(worldview models.Worldview) string {
+	content := ""
+
+	if worldview.PowerSystem.Name != "" {
+		content += fmt.Sprintf("力量体系：%s\n", worldview.PowerSystem.Name)
+		content += fmt.Sprintf("修炼方式：%s\n", worldview.PowerSystem.CultivationMethod)
+	}
+
+	if worldview.SocietyStructure.Hierarchy != "" {
+		content += fmt.Sprintf("社会结构：%s\n", worldview.SocietyStructure.Hierarchy)
+		content += fmt.Sprintf("经济体系：%s\n", worldview.SocietyStructure.EconomicSystem)
+	}
+
+	if len(worldview.Geography.MajorRegions) > 0 {
+		content += fmt.Sprintf("主要地域：%s\n", strings.Join(worldview.Geography.MajorRegions, "、"))
+	}
+
+	if len(worldview.SpecialRules) > 0 {
+		content += fmt.Sprintf("特殊规则：%s\n", strings.Join(worldview.SpecialRules, "、"))
+	}
+
+	return content
+}
+
+// parseCharacterFromMap 从map解析角色数据
+func (s *NovelGenerationService) parseCharacterFromMap(charMap map[string]interface{}) models.Character {
+	// 解析灵魂档案
+	soulProfileData := charMap["soul_profile"].(map[string]interface{})
+	personalityData := soulProfileData["personality"].(map[string]interface{})
+	backgroundData := soulProfileData["background"].(map[string]interface{})
+	motivationsData := soulProfileData["motivations"].(map[string]interface{})
+
+	soulProfile := models.SoulProfile{
+		Personality: models.Personality{
+			CoreTraits:        s.getStringArray(personalityData, "core_traits"),
+			MoralCompass:      s.getString(personalityData, "moral_compass"),
+			InternalConflicts: s.getStringArray(personalityData, "internal_conflicts"),
+			Fears:             s.getStringArray(personalityData, "fears"),
+			Desires:           s.getStringArray(personalityData, "desires"),
+		},
+		Background: models.Background{
+			Origin:         s.getString(backgroundData, "origin"),
+			DefiningEvents: s.getStringArray(backgroundData, "defining_events"),
+			HiddenSecrets:  s.getStringArray(backgroundData, "hidden_secrets"),
+		},
+		Motivations: models.Motivations{
+			ImmediateGoal: s.getString(motivationsData, "immediate_goal"),
+			LongTermGoal:  s.getString(motivationsData, "long_term_goal"),
+			CoreDrive:     s.getString(motivationsData, "core_drive"),
+		},
+	}
+
+	// 解析核心属性
+	coreAttributesData := charMap["core_attributes"].(map[string]interface{})
+	relationshipsData := coreAttributesData["relationships"].(map[string]interface{})
+
+	coreAttributes := models.CoreAttributes{
+		CultivationLevel: s.getString(coreAttributesData, "cultivation_level"),
+		CurrentItems:     s.getStringArray(coreAttributesData, "current_items"),
+		Abilities:        s.getStringArray(coreAttributesData, "abilities"),
+		Relationships: map[string][]string{
+			"enemies": s.getStringArray(relationshipsData, "enemies"),
+			"allies":  s.getStringArray(relationshipsData, "allies"),
+			"mentors": s.getStringArray(relationshipsData, "mentors"),
+		},
+	}
+
+	return models.Character{
+		Name:           s.getString(charMap, "name"),
+		Type:           s.getString(charMap, "type"),
+		SoulProfile:    soulProfile,
+		CoreAttributes: coreAttributes,
+	}
+}
+
 // GenerateChapter 生成章节
 func (s *NovelGenerationService) GenerateChapter(ctx context.Context, novelID, llmModelID string, inputData map[string]interface{}) (models.Chapter, error) {
 	// 构建输入数据
@@ -416,19 +633,19 @@ func (s *NovelGenerationService) GenerateOutline(ctx context.Context, novelID, l
 
 	// 解析章节信息
 	chapters := s.parseChapters(outlineData)
-	
+
 	// 解析故事弧线
 	storyArcs := s.parseStoryArcs(outlineData)
-	
+
 	// 解析关键主题
 	keyThemes := s.getStringArray(outlineData, "key_themes")
 
 	// 构建大纲对象
 	outline := models.Outline{
 		NovelID:   novelID,
-		Title:    s.getString(outlineData, "title"),
-		Summary:  s.getString(outlineData, "summary"),
-		Chapters: chapters,
+		Title:     s.getString(outlineData, "title"),
+		Summary:   s.getString(outlineData, "summary"),
+		Chapters:  chapters,
 		StoryArcs: storyArcs,
 		KeyThemes: keyThemes,
 	}

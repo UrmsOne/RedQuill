@@ -84,6 +84,7 @@ func Register(r *gin.Engine, cfg config.Config, mongoClient *mongo.Client) {
 		auth.POST("/generate/story-core", handlers.GenerateStoryCoreHandler(mongoClient, cfg.DBName))
 		auth.POST("/generate/worldview", handlers.GenerateWorldviewHandler(mongoClient, cfg.DBName))
 		auth.POST("/generate/character", handlers.GenerateCharacterHandler(mongoClient, cfg.DBName))
+		auth.POST("/generate/characters-from-outline", handlers.GenerateCharactersFromOutlineHandler(mongoClient, cfg.DBName))
 		auth.POST("/generate/outline", handlers.GenerateOutlineHandler(mongoClient, cfg.DBName))
 		auth.POST("/generate/chapter", handlers.GenerateChapterHandler(mongoClient, cfg.DBName))
 		auth.POST("/generate/llm", handlers.GenerateWithLLMHandler(mongoClient, cfg.DBName))

@@ -190,6 +190,80 @@ func InitializePromptTemplates(client *mongo.Client, dbName string) error {
 			Mtime:      time.Now().Unix(),
 		},
 		{
+			Name:        "批量角色生成",
+			Type:        "batch_character",
+			Phase:       "characters",
+			Description: "根据大纲批量生成所有角色，直接返回符合数据库模型的数据结构",
+			Content: `【角色】
+你是一位顶尖的角色设计师，擅长从故事大纲中识别并创造有血有肉、让读者印象深刻的人物。
+
+【任务】
+分析大纲内容，识别所有重要角色，并批量生成完整的角色档案。直接返回符合数据库模型的数据结构。
+
+【输入数据】
+- 大纲内容：{outline_content}
+- 故事核心：{story_core}
+- 世界观：{worldview}
+- 用户要求：{user_requirements}
+
+【输出要求】
+请严格按照以下JSON格式输出角色数据，确保数据结构完全符合数据库模型：
+{
+  "characters": [
+    {
+      "name": "角色名称",
+      "type": "protagonist|antagonist|supporting|mentor|minor",
+      "soul_profile": {
+        "personality": {
+          "core_traits": ["特质1", "特质2", "特质3"],
+          "moral_compass": "道德观描述",
+          "internal_conflicts": ["内心矛盾1", "内心矛盾2"],
+          "fears": ["恐惧1", "恐惧2"],
+          "desires": ["欲望1", "欲望2"]
+        },
+        "background": {
+          "origin": "出身背景",
+          "defining_events": ["关键事件1", "关键事件2"],
+          "hidden_secrets": ["隐藏秘密1", "隐藏秘密2"]
+        },
+        "motivations": {
+          "immediate_goal": "近期目标",
+          "long_term_goal": "长期目标",
+          "core_drive": "核心驱动力"
+        }
+      },
+      "core_attributes": {
+        "cultivation_level": "初始修炼境界",
+        "current_items": ["初始物品1", "初始物品2"],
+        "abilities": ["初始能力1", "初始能力2"],
+        "relationships": {
+          "enemies": ["敌人1", "敌人2"],
+          "allies": ["盟友1", "盟友2"],
+          "mentors": ["导师1", "导师2"]
+        }
+      }
+    }
+  ]
+}
+
+【生成要求】
+1. 从大纲中识别所有重要角色，包括主角、反派、重要配角、导师等
+2. 确保角色数量合理（建议5-15个主要角色）
+3. 每个角色都要有完整的灵魂档案和核心属性
+4. 角色关系要符合故事逻辑
+5. 角色能力要与世界观保持一致
+6. 确保角色名称不重复
+7. 角色类型要准确分类
+
+请开始生成角色：`,
+			Variables:  []string{"outline_content", "story_core", "worldview", "user_requirements"},
+			UsageCount: 0,
+			CreatorID:  "system",
+			Creator:    "system",
+			Ctime:      time.Now().Unix(),
+			Mtime:      time.Now().Unix(),
+		},
+		{
 			Name:        "章节内容生成",
 			Type:        "chapter",
 			Phase:       "writing",

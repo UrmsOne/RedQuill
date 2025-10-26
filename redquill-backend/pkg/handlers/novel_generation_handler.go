@@ -345,3 +345,75 @@ func GenerateCharacterStreamHandler(client *mongo.Client, dbName string, novelID
 		}
 	}
 }
+
+// GenerateCharactersFromOutlineHandler 根据大纲流式生成角色
+func GenerateCharactersFromOutlineHandler(client *mongo.Client, dbName string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			NovelID          string                 `json:"novel_id" binding:"required"`
+			LLMModelID       string                 `json:"llm_model_id" binding:"required"`
+			OutlineContent   string                 `json:"outline_content" binding:"required"`
+			StoryCore        string                 `json:"story_core" binding:"required"`
+			Worldview        string                 `json:"worldview" binding:"required"`
+			UserRequirements string                 `json:"user_requirements"`
+		}
+
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		// 设置流式响应头
+		c.Header("Content-Type", "text/event-stream")
+		c.Header("Cache-Control", "no-cache")
+		c.Header("Connection", "keep-alive")
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.Header("Access-Control-Allow-Headers", "Cache-Control")
+
+		// 构建输入数据
+		inputData := map[string]interface{}{
+			"outline_content":   req.OutlineContent,
+			"story_core":        req.StoryCore,
+			"worldview":         req.Worldview,
+			"user_requirements": req.UserRequirements,
+		}
+
+		// 创建流式生成请求
+		generationReq := models.GenerationRequest{
+			NovelID:      req.NovelID,
+			LLMModelID:   req.LLMModelID,
+			InputData:    inputData,
+			TemplateType: "batch_character",
+			Stream:       true,
+		}
+
+		// 调用流式生成服务
+		templateService := services.NewPromptTemplateService(client, dbName)
+		response, err := templateService.GenerateWithLLMStream(c.Request.Context(), generationReq)
+		if err != nil {
+			c.SSEvent("error", gin.H{"error": err.Error()})
+			return
+		}
+
+		// 发送流式数据
+		chunkCount := 0
+		for chunk := range response {
+			chunkCount++
+			if chunk.Error != nil {
+				c.SSEvent("error", gin.H{"error": chunk.Error.Error()})
+				return
+			}
+
+			// 发送数据块
+			c.SSEvent("data", gin.H{
+				"content": chunk.Content,
+				"done":    chunk.Done,
+			})
+			c.Writer.Flush()
+
+			if chunk.Done {
+				break
+			}
+		}
+	}
+}

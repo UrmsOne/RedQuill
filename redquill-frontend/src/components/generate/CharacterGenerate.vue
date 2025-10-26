@@ -53,6 +53,109 @@
       </a-form-item>
     </a-form>
     
+    <!-- 批量生成区域 -->
+    <a-divider>批量生成</a-divider>
+    
+    <a-card title="根据大纲生成所有角色" size="small" style="margin-bottom: 16px;">
+      <template #extra>
+        <a-button 
+          type="primary" 
+          @click="handleBatchGenerate"
+          :loading="batchGenerating"
+          :disabled="!availableOutlines.length"
+        >
+          批量生成角色 ({{ availableOutlines.length }})
+        </a-button>
+      </template>
+      
+      <a-form layout="vertical">
+        <a-form-item label="选择大纲">
+          <a-select 
+            v-model:value="batchForm.outline_id" 
+            placeholder="请选择用于生成角色的大纲"
+            :loading="outlinesLoading"
+          >
+            <a-select-option 
+              v-for="outline in availableOutlines" 
+              :key="outline.id" 
+              :value="outline.id"
+            >
+              {{ outline.title }} ({{ outline.chapters?.length || 0 }}章)
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        
+        <a-form-item label="用户要求">
+          <a-textarea 
+            v-model:value="batchForm.user_requirements" 
+            placeholder="请输入对角色生成的具体要求，如：希望重点突出某个角色、特定的角色关系等"
+            :rows="3"
+          />
+        </a-form-item>
+        
+        <a-form-item label="LLM模型">
+          <a-select v-model:value="batchForm.llm_model_id" placeholder="请选择LLM模型">
+            <a-select-option v-for="model in models" :key="model.id" :value="model.id">
+              {{ model.display_name || model.name }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+      </a-form>
+    </a-card>
+    
+    <!-- 流式生成内容 -->
+    <div v-if="batchGenerating || batchStreamContent" class="stream-content">
+      <a-card title="生成中..." size="small">
+        <template #extra>
+          <a-tag v-if="batchGenerating" color="processing">生成中</a-tag>
+          <a-tag v-else color="success">生成完成</a-tag>
+        </template>
+        
+        <div class="stream-text">
+          <pre>{{ batchStreamContent }}</pre>
+        </div>
+      </a-card>
+    </div>
+    
+    <!-- 批量生成结果 -->
+    <div v-if="batchResult.length > 0" class="batch-result">
+      <a-card title="批量生成结果" size="small">
+        <template #extra>
+          <a-space>
+            <a-tag color="green">{{ batchResult.length }} 个角色</a-tag>
+            <a-button 
+              type="primary" 
+              @click="handleBatchSaveToDatabase"
+              :loading="batchSaving"
+            >
+              {{ batchSaving ? '保存中...' : '保存到数据库' }}
+            </a-button>
+            <a-button @click="handleViewBatchRawData">
+              查看原始数据
+            </a-button>
+          </a-space>
+        </template>
+        
+        <a-list :data-source="batchResult" item-layout="vertical">
+          <template #renderItem="{ item }">
+            <a-list-item>
+              <a-list-item-meta
+                :title="item.name"
+                :description="`类型: ${getCharacterTypeText(item.type)}`"
+              />
+              <template #actions>
+                <a @click="viewCharacter(item)">查看详情</a>
+              </template>
+              <div class="character-summary">
+                <p><strong>核心驱动力：</strong>{{ item.soul_profile?.motivations?.core_drive || '未定义' }}</p>
+                <p><strong>修炼境界：</strong>{{ item.core_attributes?.cultivation_level || '未定义' }}</p>
+              </div>
+            </a-list-item>
+          </template>
+        </a-list>
+      </a-card>
+    </div>
+    
     <!-- 生成结果 -->
     <div v-if="result" class="result-section">
       <a-card title="生成结果">
@@ -197,6 +300,20 @@ const parsedResult = ref(null)
 const rawData = ref(null)
 const rawDataModalVisible = ref(false)
 
+// 批量生成相关状态
+const batchGenerating = ref(false)
+const batchResult = ref([])
+const batchStreamContent = ref('')
+const batchSaving = ref(false)
+const availableOutlines = ref([])
+const outlinesLoading = ref(false)
+
+const batchForm = reactive({
+  outline_id: '',
+  user_requirements: '',
+  llm_model_id: ''
+})
+
 const getCharacterTypeText = (type: string) => {
   const types: Record<string, string> = {
     protagonist: '主角',
@@ -217,6 +334,290 @@ const fetchModels = async () => {
   } finally {
     modelsLoading.value = false
   }
+}
+
+// 获取可用大纲
+const fetchAvailableOutlines = async () => {
+  if (!props.novel?.id) {
+    console.log('没有novel.id，跳过获取大纲列表')
+    return
+  }
+  
+  try {
+    console.log('开始获取大纲列表，novel.id:', props.novel.id)
+    outlinesLoading.value = true
+    const response = await api.get(`/outlines/${props.novel.id}`)
+    availableOutlines.value = response.data || []
+    console.log('获取到大纲列表:', availableOutlines.value)
+  } catch (error) {
+    console.warn('获取大纲列表失败:', error)
+    availableOutlines.value = []
+  } finally {
+    outlinesLoading.value = false
+  }
+}
+
+// 批量生成角色（流式）
+const handleBatchGenerate = async () => {
+  console.log('开始批量生成角色', {
+    outline_id: batchForm.outline_id,
+    llm_model_id: batchForm.llm_model_id,
+    novel_id: props.novel?.id
+  })
+  
+  if (!batchForm.outline_id || !batchForm.llm_model_id) {
+    message.error('请选择大纲和LLM模型')
+    return
+  }
+  
+  try {
+    batchGenerating.value = true
+    batchResult.value = []
+    batchStreamContent.value = ''
+    
+    console.log('开始获取数据...')
+    
+    // 获取大纲、故事核心、世界观数据
+    const [outlineData, storyCoreData, worldviewData] = await Promise.all([
+      fetchOutlineData(batchForm.outline_id),
+      fetchStoryCoreData(),
+      fetchWorldviewData()
+    ])
+    
+    console.log('数据获取完成，开始流式生成...', {
+      outlineData: outlineData.substring(0, 100) + '...',
+      storyCoreData: storyCoreData.substring(0, 100) + '...',
+      worldviewData: worldviewData.substring(0, 100) + '...'
+    })
+    
+    await streamGenerate(
+      '/generate/characters-from-outline',
+      {
+        novel_id: props.novel.id,
+        llm_model_id: batchForm.llm_model_id,
+        outline_content: outlineData,
+        story_core: storyCoreData,
+        worldview: worldviewData,
+        user_requirements: batchForm.user_requirements
+      },
+      (content: string) => {
+        console.log('收到流式内容:', content)
+        // 累积流式内容
+        batchStreamContent.value += content
+      },
+      () => {
+        console.log('流式生成完成')
+        batchGenerating.value = false
+        message.success('批量生成完成')
+        // 解析生成的内容
+        try {
+          const parsed = cleanAndParseJSON(batchStreamContent.value)
+          if (parsed && parsed.characters) {
+            batchResult.value = parsed.characters
+            message.success(`成功生成 ${parsed.characters.length} 个角色`)
+            emit('generated', 'character', parsed.characters)
+          } else {
+            message.warning('生成的内容格式不正确')
+          }
+        } catch (error) {
+          console.error('解析生成内容失败:', error)
+          message.error('解析生成内容失败，请查看流式内容')
+        }
+      },
+      (error: string) => {
+        console.error('流式生成错误:', error)
+        batchGenerating.value = false
+        message.error('批量生成失败: ' + error)
+      }
+    )
+  } catch (error: any) {
+    console.error('批量生成异常:', error)
+    batchGenerating.value = false
+    message.error(error.response?.data?.error || error.message || '批量生成失败')
+  }
+}
+
+// 获取大纲数据
+const fetchOutlineData = async (outlineId: string) => {
+  try {
+    console.log('获取大纲数据，outlineId:', outlineId)
+    const response = await api.get(`/outline/${outlineId}`)
+    const outline = response.data
+    
+    console.log('获取到大纲数据:', outline)
+    
+    if (!outline) {
+      throw new Error('大纲数据为空')
+    }
+    
+    let content = `标题：${outline.title || '未命名'}\n概要：${outline.summary || '无概要'}\n`
+    
+    if (outline.key_themes && outline.key_themes.length > 0) {
+      content += `关键主题：${outline.key_themes.join('、')}\n`
+    }
+    
+    if (outline.story_arcs && outline.story_arcs.length > 0) {
+      content += '故事弧线：\n'
+      outline.story_arcs.forEach((arc: any) => {
+        content += `- ${arc.name}：${arc.description} (第${arc.start_chapter}-${arc.end_chapter}章)\n`
+      })
+    }
+    
+    if (outline.chapters && outline.chapters.length > 0) {
+      content += '章节概览：\n'
+      outline.chapters.forEach((chapter: any) => {
+        content += `第${chapter.chapter_number}章：${chapter.title} - ${chapter.summary}\n`
+      })
+    }
+    
+    return content
+  } catch (error) {
+    console.error('获取大纲数据失败:', error)
+    throw new Error('获取大纲数据失败: ' + (error as Error).message)
+  }
+}
+
+// 获取故事核心数据
+const fetchStoryCoreData = async () => {
+  try {
+    const response = await api.get(`/story-cores/${props.novel.id}`)
+    const storyCores = response.data
+    
+    if (!storyCores || storyCores.length === 0) {
+      throw new Error('没有找到故事核心数据')
+    }
+    
+    const storyCore = storyCores[0]
+    let content = `核心冲突：${storyCore.core_conflict}\n`
+    content += `主题：${storyCore.theme}\n`
+    content += `创新点：${storyCore.innovation}\n`
+    content += `商业潜力：${storyCore.commercial_potential}\n`
+    content += `目标受众：${storyCore.target_audience}\n`
+    
+    return content
+  } catch (error) {
+    console.error('获取故事核心数据失败:', error)
+    throw new Error('获取故事核心数据失败')
+  }
+}
+
+// 获取世界观数据
+const fetchWorldviewData = async () => {
+  try {
+    const response = await api.get(`/worldview/${props.novel.id}`)
+    const worldview = response.data
+    
+    let content = '力量体系：\n'
+    content += `- 名称：${worldview.power_system?.name || ''}\n`
+    content += `- 修炼方法：${worldview.power_system?.cultivation_method || ''}\n`
+    content += `- 限制：${worldview.power_system?.limitations || ''}\n`
+    
+    if (worldview.power_system?.levels && worldview.power_system.levels.length > 0) {
+      content += `- 等级：${worldview.power_system.levels.join('、')}\n`
+    }
+    
+    content += '社会结构：\n'
+    content += `- 等级制度：${worldview.society_structure?.hierarchy || ''}\n`
+    content += `- 经济体系：${worldview.society_structure?.economic_system || ''}\n`
+    
+    if (worldview.society_structure?.major_factions && worldview.society_structure.major_factions.length > 0) {
+      content += '- 主要势力：\n'
+      worldview.society_structure.major_factions.forEach((faction: any) => {
+        content += `  * ${faction.name} (${faction.type}) - ${faction.influence}\n`
+      })
+    }
+    
+    content += '地理环境：\n'
+    if (worldview.geography?.major_regions && worldview.geography.major_regions.length > 0) {
+      content += `- 主要区域：${worldview.geography.major_regions.join('、')}\n`
+    }
+    if (worldview.geography?.special_locations && worldview.geography.special_locations.length > 0) {
+      content += `- 特殊地点：${worldview.geography.special_locations.join('、')}\n`
+    }
+    
+    if (worldview.special_rules && worldview.special_rules.length > 0) {
+      content += `特殊规则：${worldview.special_rules.join('、')}\n`
+    }
+    
+    return content
+  } catch (error) {
+    console.error('获取世界观数据失败:', error)
+    throw new Error('获取世界观数据失败')
+  }
+}
+
+// 清理Markdown格式并提取JSON
+const cleanAndParseJSON = (content: string) => {
+  try {
+    // 移除Markdown代码块标记
+    let cleaned = content.replace(/```json\s*/g, '').replace(/```\s*/g, '')
+    
+    // 尝试找到JSON对象
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      cleaned = jsonMatch[0]
+    }
+    
+    // 解析JSON
+    return JSON.parse(cleaned)
+  } catch (error) {
+    console.error('清理和解析JSON失败:', error)
+    throw error
+  }
+}
+
+// 查看角色详情
+const viewCharacter = (character: any) => {
+  message.info(`查看角色: ${character.name}`)
+  // 这里可以打开角色详情模态框或跳转到详情页面
+}
+
+// 批量保存到数据库
+const handleBatchSaveToDatabase = async () => {
+  if (!batchResult.value || batchResult.value.length === 0 || !props.novel?.id) {
+    message.error('没有可保存的数据')
+    return
+  }
+  
+  try {
+    batchSaving.value = true
+    
+    // 批量保存角色
+    const savePromises = batchResult.value.map(async (character: any) => {
+      const characterData = {
+        novel_id: props.novel.id,
+        name: character.name,
+        type: character.type,
+        core_attributes: character.core_attributes || {},
+        soul_profile: character.soul_profile || {}
+      }
+      
+      return api.post('/character', characterData)
+    })
+    
+    const responses = await Promise.all(savePromises)
+    
+    message.success(`成功保存 ${responses.length} 个角色到数据库`)
+    
+    // 触发父组件更新
+    emit('generated', 'character', responses.map(r => r.data))
+    
+    // 清空批量结果
+    batchResult.value = []
+    batchStreamContent.value = ''
+    
+  } catch (error: any) {
+    console.error('批量保存角色失败:', error)
+    message.error('保存失败: ' + (error.response?.data?.error || error.message))
+  } finally {
+    batchSaving.value = false
+  }
+}
+
+// 查看批量生成原始数据
+const handleViewBatchRawData = () => {
+  rawData.value = batchResult.value
+  rawDataModalVisible.value = true
 }
 
 const handleGenerate = async () => {
@@ -290,27 +691,6 @@ const handleStreamGenerate = async () => {
   }
 }
 
-// 监听novel变化，自动填充表单
-watch(() => props.novel, (newNovel, oldNovel) => {
-  console.log('CharacterGenerate: novel数据变化', { newNovel, oldNovel })
-  if (newNovel) {
-    try {
-      autoFillForm()
-    } catch (error) {
-      console.error('CharacterGenerate: 自动填充表单失败', error)
-    }
-  }
-}, { immediate: true })
-
-onMounted(() => {
-  if (props.novel) {
-    fetchModels()
-    
-    // 自动填充表单数据
-    autoFillForm()
-  }
-})
-
 // 自动填充表单数据
 const autoFillForm = () => {
   if (!props.novel) return
@@ -330,6 +710,28 @@ const autoFillForm = () => {
     form.role_requirements += `\n风格要求：${props.novel.ai_context.style_guideline}`
   }
 }
+
+// 监听novel变化，自动填充表单
+watch(() => props.novel, (newNovel, oldNovel) => {
+  console.log('CharacterGenerate: novel数据变化', { newNovel, oldNovel })
+  if (newNovel) {
+    try {
+      autoFillForm()
+    } catch (error) {
+      console.error('CharacterGenerate: 自动填充表单失败', error)
+    }
+  }
+}, { immediate: true })
+
+onMounted(() => {
+  if (props.novel) {
+    fetchModels()
+    fetchAvailableOutlines()
+    
+    // 自动填充表单数据
+    autoFillForm()
+  }
+})
 
 // 保存到数据库
 const handleSaveToDatabase = async () => {
@@ -433,5 +835,41 @@ const handleViewRawData = () => {
 @keyframes blink {
   0%, 50% { opacity: 1; }
   51%, 100% { opacity: 0; }
+}
+
+.stream-content {
+  margin-bottom: 16px;
+}
+
+.stream-text {
+  max-height: 300px;
+  overflow-y: auto;
+  background: #f5f5f5;
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid #d9d9d9;
+}
+
+.stream-text pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.batch-result {
+  margin-top: 16px;
+}
+
+.character-summary {
+  margin-top: 8px;
+}
+
+.character-summary p {
+  margin: 4px 0;
+  font-size: 12px;
+  color: #666;
 }
 </style>
