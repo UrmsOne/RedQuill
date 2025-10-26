@@ -251,6 +251,77 @@ func InitializePromptTemplates(client *mongo.Client, dbName string) error {
 			Mtime:      time.Now().Unix(),
 		},
 		{
+			Name:        "小说大纲生成",
+			Type:        "outline",
+			Phase:       "outlining",
+			Description: "根据故事核心和世界观生成完整的小说大纲",
+			Content: `【角色】
+你是一位专业的小说创作助手，请根据提供的故事核心、世界观和总章节数，生成详细的小说大纲。
+
+【任务】
+基于故事核心、世界观和总章节数，生成完整的小说大纲，包含章节信息、故事弧线和关键主题。
+
+【输入数据】
+- 故事核心：{story_core}
+- 世界观：{worldview}
+- 总章节数：{total_chapters}
+- 小说类型：{genre}
+- 目标读者：{target_audience}
+- 用户要求：{user_ideas},
+
+【输出要求】
+请生成一个完整的JSON格式大纲，包含以下结构：
+
+{
+  "title": "小说标题",
+  "summary": "整体故事概要",
+  "key_themes": ["主题1", "主题2"],
+  "story_arcs": [
+    {
+      "name": "弧线名称",
+      "description": "弧线描述",
+      "start_chapter": 1,
+      "end_chapter": 10,
+      "theme": "弧线主题"
+    }
+  ],
+  "chapters": [
+    {
+      "chapter_number": 1,
+      "title": "章节标题",
+      "summary": "章节概要",
+      "key_events": ["关键事件1", "关键事件2"],
+      "characters": ["角色1", "角色2"],
+      "location": "场景地点",
+      "pov": "视角角色",
+      "word_count": 3000,
+      "outline": {
+        "goal": "章节目标",
+        "key_events": ["关键事件"],
+        "dramatic_points": 3
+      }
+    }
+  ]
+}
+
+【生成要求】
+1. 确保章节数量与总章节数一致
+2. 每个章节都要有明确的目标和关键事件
+3. 故事弧线要合理分布，体现故事的发展脉络
+4. 角色出场要符合故事逻辑
+5. 场景设置要与世界观保持一致
+6. 每个章节的字数要合理（建议2000-5000字）
+7. 故事弧线应该包含：开端、发展、高潮、结局等经典结构
+
+请开始生成大纲：`,
+			Variables:  []string{"story_core", "worldview", "total_chapters", "genre", "target_audience", "user_ideas"},
+			UsageCount: 0,
+			CreatorID:  "system",
+			Creator:    "system",
+			Ctime:      time.Now().Unix(),
+			Mtime:      time.Now().Unix(),
+		},
+		{
 			Name:        "内容质量审核",
 			Type:        "quality_review",
 			Phase:       "writing",

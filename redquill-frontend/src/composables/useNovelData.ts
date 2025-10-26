@@ -14,6 +14,7 @@ export function useNovelData(novelId: string) {
   const worldviews = ref([])
   const characters = ref([])
   const chapters = ref([])
+  const outlines = ref([])
   
   // 加载状态
   const loading = ref(false)
@@ -21,6 +22,7 @@ export function useNovelData(novelId: string) {
   const worldviewsLoading = ref(false)
   const charactersLoading = ref(false)
   const chaptersLoading = ref(false)
+  const outlinesLoading = ref(false)
   
   // 计算属性 - 自动提取的小说信息
   const novelInfo = computed(() => {
@@ -114,6 +116,22 @@ export function useNovelData(novelId: string) {
     }
   })
   
+  // 计算属性 - 大纲信息
+  const outlineInfo = computed(() => {
+    if (!outlines.value.length) return null
+    
+    return {
+      available_outlines: outlines.value.map(outline => ({
+        id: outline.id,
+        title: outline.title,
+        summary: outline.summary,
+        chapter_count: outline.chapters?.length || 0,
+        arc_count: outline.story_arcs?.length || 0
+      })),
+      latest_outline: outlines.value[0]
+    }
+  })
+  
   // 计算属性 - ExtraInfo信息
   const extraInfo = computed(() => {
     if (!novel.value?.extra_info) return null
@@ -122,6 +140,7 @@ export function useNovelData(novelId: string) {
       story_core: novel.value.extra_info.story_core,
       worldview: novel.value.extra_info.worldview,
       character: novel.value.extra_info.character,
+      outline: novel.value.extra_info.outline,
       chapter: novel.value.extra_info.chapter,
       all_phases: novel.value.extra_info
     }
@@ -194,6 +213,19 @@ export function useNovelData(novelId: string) {
     }
   }
   
+  // 获取大纲
+  const fetchOutlines = async () => {
+    try {
+      outlinesLoading.value = true
+      await novelStore.fetchOutlines(novelId)
+      outlines.value = novelStore.outlines
+    } catch (error) {
+      console.error('获取大纲失败:', error)
+    } finally {
+      outlinesLoading.value = false
+    }
+  }
+  
   // 获取所有相关数据
   const fetchAllData = async () => {
     await Promise.all([
@@ -201,6 +233,7 @@ export function useNovelData(novelId: string) {
       fetchStoryCores(),
       fetchWorldviews(),
       fetchCharacters(),
+      fetchOutlines(),
       fetchChapters()
     ])
   }
@@ -225,11 +258,13 @@ export function useNovelData(novelId: string) {
         promises.push(fetchStoryCores(), fetchWorldviews(), fetchCharacters())
         break
       case 'outlining':
+        promises.push(fetchStoryCores(), fetchWorldviews(), fetchCharacters(), fetchOutlines())
+        break
       case 'writing':
-        promises.push(fetchStoryCores(), fetchWorldviews(), fetchCharacters(), fetchChapters())
+        promises.push(fetchStoryCores(), fetchWorldviews(), fetchCharacters(), fetchOutlines(), fetchChapters())
         break
       default:
-        promises.push(fetchStoryCores(), fetchWorldviews(), fetchCharacters(), fetchChapters())
+        promises.push(fetchStoryCores(), fetchWorldviews(), fetchCharacters(), fetchOutlines(), fetchChapters())
     }
     
     await Promise.all(promises)
@@ -264,6 +299,12 @@ export function useNovelData(novelId: string) {
         }
         break
         
+      case 'outline':
+        defaults.genre = novelInfo.value.genre || ''
+        defaults.target_audience = novelInfo.value.target_audience || ''
+        defaults.total_chapters = 50 // 默认50章
+        break
+        
       case 'chapter':
         if (storyCoreInfo.value?.latest_core) {
           defaults.novel_context = {
@@ -295,6 +336,7 @@ export function useNovelData(novelId: string) {
     worldviews,
     characters,
     chapters,
+    outlines,
     
     // 加载状态
     loading,
@@ -302,6 +344,7 @@ export function useNovelData(novelId: string) {
     worldviewsLoading,
     charactersLoading,
     chaptersLoading,
+    outlinesLoading,
     
     // 计算属性
     novelInfo,
@@ -309,6 +352,7 @@ export function useNovelData(novelId: string) {
     worldviewInfo,
     characterInfo,
     chapterInfo,
+    outlineInfo,
     extraInfo,
     
     // 方法
@@ -317,6 +361,7 @@ export function useNovelData(novelId: string) {
     fetchWorldviews,
     fetchCharacters,
     fetchChapters,
+    fetchOutlines,
     fetchAllData,
     fetchRelevantData,
     getFormDefaults

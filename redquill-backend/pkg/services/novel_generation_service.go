@@ -388,3 +388,121 @@ func (s *NovelGenerationService) parseCharacterDevelopment(data map[string]inter
 	}
 	return development
 }
+
+// GenerateOutline 生成大纲
+func (s *NovelGenerationService) GenerateOutline(ctx context.Context, novelID, llmModelID string, inputData map[string]interface{}) (models.Outline, error) {
+	// 构建输入数据
+	generationReq := models.GenerationRequest{
+		NovelID:      novelID,
+		LLMModelID:   llmModelID,
+		InputData:    inputData,
+		TemplateType: "outline",
+		Stream:       false,
+	}
+
+	// 调用LLM生成
+	templateService := NewPromptTemplateService(s.client, s.dbName)
+	response, err := templateService.GenerateWithLLM(ctx, generationReq)
+	if err != nil {
+		return models.Outline{}, err
+	}
+
+	if !response.Success {
+		return models.Outline{}, errors.New(response.Error)
+	}
+
+	// 解析响应数据
+	outlineData := response.Data
+
+	// 解析章节信息
+	chapters := s.parseChapters(outlineData)
+	
+	// 解析故事弧线
+	storyArcs := s.parseStoryArcs(outlineData)
+	
+	// 解析关键主题
+	keyThemes := s.getStringArray(outlineData, "key_themes")
+
+	// 构建大纲对象
+	outline := models.Outline{
+		NovelID:   novelID,
+		Title:    s.getString(outlineData, "title"),
+		Summary:  s.getString(outlineData, "summary"),
+		Chapters: chapters,
+		StoryArcs: storyArcs,
+		KeyThemes: keyThemes,
+	}
+
+	// 保存到数据库
+	novelService := NewNovelService(s.client, s.dbName)
+	outline, err = novelService.PostOutlines(ctx, outline)
+	if err != nil {
+		return models.Outline{}, err
+	}
+
+	// 保存ExtraInfo
+	extraInfo := map[string]interface{}{
+		"generation_time": response.Data["generation_time"],
+		"token_count":     response.TokenCount,
+		"usage_count":     response.UsageCount,
+		"raw_response":    response.Data,
+	}
+	if err := novelService.UpdateNovelExtraInfo(ctx, novelID, "outline", extraInfo); err != nil {
+		// 记录错误但不影响主流程
+		// log.Printf("Failed to update extra info: %v", err)
+	}
+
+	return outline, nil
+}
+
+// parseChapters 解析章节信息
+func (s *NovelGenerationService) parseChapters(data map[string]interface{}) []models.ChapterInfo {
+	chapters := []models.ChapterInfo{}
+	if chaptersData, ok := data["chapters"]; ok {
+		if arr, ok := chaptersData.([]interface{}); ok {
+			for _, v := range arr {
+				if chapterMap, ok := v.(map[string]interface{}); ok {
+					chapter := models.ChapterInfo{
+						ChapterNumber: s.getInt(chapterMap, "chapter_number"),
+						Title:         s.getString(chapterMap, "title"),
+						Summary:       s.getString(chapterMap, "summary"),
+						KeyEvents:     s.getStringArray(chapterMap, "key_events"),
+						Characters:    s.getStringArray(chapterMap, "characters"),
+						Location:      s.getString(chapterMap, "location"),
+						POV:           s.getString(chapterMap, "pov"),
+						WordCount:     s.getInt(chapterMap, "word_count"),
+						Outline: models.ChapterOutline{
+							Goal:           s.getString(chapterMap, "outline.goal"),
+							KeyEvents:      s.getStringArray(chapterMap, "outline.key_events"),
+							DramaticPoints: s.getInt(chapterMap, "outline.dramatic_points"),
+						},
+					}
+					chapters = append(chapters, chapter)
+				}
+			}
+		}
+	}
+	return chapters
+}
+
+// parseStoryArcs 解析故事弧线
+func (s *NovelGenerationService) parseStoryArcs(data map[string]interface{}) []models.StoryArc {
+	arcs := []models.StoryArc{}
+	if arcsData, ok := data["story_arcs"]; ok {
+		if arr, ok := arcsData.([]interface{}); ok {
+			for _, v := range arr {
+				if arcMap, ok := v.(map[string]interface{}); ok {
+					arc := models.StoryArc{
+						Name:         s.getString(arcMap, "name"),
+						Description:  s.getString(arcMap, "description"),
+						StartChapter: s.getInt(arcMap, "start_chapter"),
+						EndChapter:   s.getInt(arcMap, "end_chapter"),
+						Theme:        s.getString(arcMap, "theme"),
+					}
+					arcs = append(arcs, arc)
+				}
+			}
+		}
+	}
+	return arcs
+}

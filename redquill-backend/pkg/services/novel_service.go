@@ -443,3 +443,148 @@ func (s *NovelService) GetWritingSessions(ctx context.Context, novelID string) (
 
 	return session, nil
 }
+
+// PostOutlines 创建大纲
+func (s *NovelService) PostOutlines(ctx context.Context, outline models.Outline) (models.Outline, error) {
+	coll := s.client.Database(s.dbName).Collection("outlines")
+
+	now := time.Now()
+	outline.Ctime = now.Unix()
+	outline.Mtime = now.Unix()
+
+	res, err := coll.InsertOne(ctx, outline)
+	if err != nil {
+		return models.Outline{}, err
+	}
+
+	if oid, ok := res.InsertedID.(primitive.ObjectID); ok {
+		outline.ID = oid.Hex()
+	}
+
+	return outline, nil
+}
+
+// GetOutlines 获取大纲列表
+func (s *NovelService) GetOutlines(ctx context.Context, novelID string) ([]models.Outline, error) {
+	coll := s.client.Database(s.dbName).Collection("outlines")
+
+	cursor, err := coll.Find(ctx, bson.M{"novel_id": novelID}, options.Find().SetSort(bson.M{"ctime": -1}))
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var outlines []models.Outline
+	if err := cursor.All(ctx, &outlines); err != nil {
+		return nil, err
+	}
+
+	return outlines, nil
+}
+
+// GetOutline 获取单个大纲
+func (s *NovelService) GetOutline(ctx context.Context, id string) (models.Outline, error) {
+	coll := s.client.Database(s.dbName).Collection("outlines")
+	oid, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return models.Outline{}, errors.New("invalid id")
+	}
+
+	var outline models.Outline
+	if err := coll.FindOne(ctx, bson.M{"_id": oid}).Decode(&outline); err != nil {
+		return models.Outline{}, err
+	}
+
+	return outline, nil
+}
+
+// PutOutlines 更新大纲
+func (s *NovelService) PutOutlines(ctx context.Context, id string, title *string, summary *string, chapters *[]models.ChapterInfo, storyArcs *[]models.StoryArc, keyThemes *[]string) (models.Outline, error) {
+	coll := s.client.Database(s.dbName).Collection("outlines")
+	oid, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return models.Outline{}, errors.New("invalid id")
+	}
+
+	update := bson.M{"mtime": time.Now().Unix()}
+	set := bson.M{}
+
+	if title != nil {
+		set["title"] = *title
+	}
+	if summary != nil {
+		set["summary"] = *summary
+	}
+	if chapters != nil {
+		set["chapters"] = *chapters
+	}
+	if storyArcs != nil {
+		set["story_arcs"] = *storyArcs
+	}
+	if keyThemes != nil {
+		set["key_themes"] = *keyThemes
+	}
+
+	for k, v := range set {
+		update[k] = v
+	}
+
+	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
+	var out models.Outline
+	if err := coll.FindOneAndUpdate(ctx, bson.M{"_id": oid}, bson.M{"$set": update}, opts).Decode(&out); err != nil {
+		return models.Outline{}, err
+	}
+
+	return out, nil
+}
+
+// DeleteOutlines 删除大纲
+func (s *NovelService) DeleteOutlines(ctx context.Context, id string) error {
+	coll := s.client.Database(s.dbName).Collection("outlines")
+	oid, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return errors.New("invalid id")
+	}
+
+	_, err = coll.DeleteOne(ctx, bson.M{"_id": oid})
+	return err
+}
+
+// ListOutlines 分页查询大纲列表
+func (s *NovelService) ListOutlines(ctx context.Context, page, pageSize int64, sortExpr, keyword string) (PagedOutlines, error) {
+	coll := s.client.Database(s.dbName).Collection("outlines")
+
+	// 构建过滤条件
+	kwFilter := common.BuildKeywordFilter(keyword, []string{"title", "summary"})
+	filter := common.MergeFilters(bson.M{}, kwFilter)
+
+	// 构建选项
+	sort := common.BuildSort(sortExpr)
+	opts := common.BuildFindOptions(page, pageSize, sort, bson.M{})
+
+	items, total, err := common.FindWithPagination[models.Outline](ctx, coll, filter, opts)
+	if err != nil {
+		return PagedOutlines{}, err
+	}
+
+	totalPages := total / common.NormalizePageSize(pageSize)
+	if total%common.NormalizePageSize(pageSize) != 0 {
+		totalPages++
+	}
+
+	return PagedOutlines{
+		Items: items,
+		Pagination: common.Pagination{
+			Page:      common.NormalizePage(page),
+			PageSize:  common.NormalizePageSize(pageSize),
+			Total:     total,
+			TotalPage: totalPages,
+		},
+	}, nil
+}
+
+// PagedOutlines 分页大纲结果
+type PagedOutlines struct {
+	Items      []models.Outline `json:"items"`
+	Pagination common.Pagination `json:"pagination"`
+}

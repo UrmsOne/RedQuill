@@ -149,6 +149,38 @@ export interface QualityMetrics {
   improvement_areas: string[]
 }
 
+export interface Outline {
+  id: string
+  novel_id: string
+  title: string
+  summary: string
+  chapters: ChapterInfo[]
+  story_arcs: StoryArc[]
+  key_themes: string[]
+  ctime: number
+  mtime: number
+}
+
+export interface ChapterInfo {
+  chapter_number: number
+  title: string
+  summary: string
+  key_events: string[]
+  characters: string[]
+  location: string
+  pov: string
+  word_count: number
+  outline: ChapterOutline
+}
+
+export interface StoryArc {
+  name: string
+  description: string
+  start_chapter: number
+  end_chapter: number
+  theme: string
+}
+
 export const useNovelStore = defineStore('novel', () => {
   const novels = ref<Novel[]>([])
   const currentNovel = ref<Novel | null>(null)
@@ -156,6 +188,7 @@ export const useNovelStore = defineStore('novel', () => {
   const worldviews = ref<Worldview[]>([])
   const characters = ref<Character[]>([])
   const chapters = ref<Chapter[]>([])
+  const outlines = ref<Outline[]>([])
   const loading = ref(false)
 
   // 获取小说列表
@@ -289,6 +322,78 @@ export const useNovelStore = defineStore('novel', () => {
     }
   }
 
+  // 获取大纲列表
+  const fetchOutlines = async (novelId: string) => {
+    try {
+      const response = await api.get(`/outlines/${novelId}`)
+      outlines.value = response.data
+    } catch (error: any) {
+      message.error(error.response?.data?.error || '获取大纲列表失败')
+    }
+  }
+
+  // 获取单个大纲
+  const fetchOutline = async (id: string) => {
+    try {
+      const response = await api.get(`/outline/${id}`)
+      return response.data
+    } catch (error: any) {
+      message.error(error.response?.data?.error || '获取大纲详情失败')
+      return null
+    }
+  }
+
+  // 创建大纲
+  const createOutline = async (outlineData: Partial<Outline>) => {
+    try {
+      loading.value = true
+      const response = await api.post('/outline', outlineData)
+      outlines.value.unshift(response.data)
+      message.success('创建成功')
+      return response.data
+    } catch (error: any) {
+      message.error(error.response?.data?.error || '创建失败')
+      return null
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // 更新大纲
+  const updateOutline = async (id: string, outlineData: Partial<Outline>) => {
+    try {
+      loading.value = true
+      const response = await api.put(`/outline/${id}`, outlineData)
+      const index = outlines.value.findIndex(o => o.id === id)
+      if (index !== -1) {
+        outlines.value[index] = response.data
+      }
+      message.success('更新成功')
+      return response.data
+    } catch (error: any) {
+      message.error(error.response?.data?.error || '更新失败')
+      return null
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // 删除大纲
+  const deleteOutline = async (id: string) => {
+    try {
+      loading.value = true
+      await api.delete(`/outline/${id}`)
+      outlines.value = outlines.value.filter(o => o.id !== id)
+      message.success('删除成功')
+      return true
+    } catch (error: any) {
+      message.error(error.response?.data?.error || '删除失败')
+      return false
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     novels,
     currentNovel,
@@ -296,6 +401,7 @@ export const useNovelStore = defineStore('novel', () => {
     worldviews,
     characters,
     chapters,
+    outlines,
     loading,
     fetchNovels,
     fetchNovel,
@@ -305,6 +411,11 @@ export const useNovelStore = defineStore('novel', () => {
     fetchStoryCores,
     fetchWorldview,
     fetchCharacters,
-    fetchChapters
+    fetchChapters,
+    fetchOutlines,
+    fetchOutline,
+    createOutline,
+    updateOutline,
+    deleteOutline
   }
 })

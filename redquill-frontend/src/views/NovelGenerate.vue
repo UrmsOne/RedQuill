@@ -25,14 +25,21 @@
               @generated="handleGenerated"
             />
           </a-tab-pane>
-          
+
+          <a-tab-pane key="outline" tab="大纲">
+            <OutlineGenerate
+                :novel="novel"
+                @generated="handleGenerated"
+            />
+          </a-tab-pane>
+
           <a-tab-pane key="character" tab="角色">
             <CharacterGenerate 
               :novel="novel"
               @generated="handleGenerated"
             />
           </a-tab-pane>
-          
+
           <a-tab-pane key="chapter" tab="章节">
             <ChapterGenerate 
               :novel="novel"
@@ -56,6 +63,7 @@ import { useNovelData } from '@/composables/useNovelData'
 import StoryCoreGenerate from '@/components/generate/StoryCoreGenerate.vue'
 import WorldviewGenerate from '@/components/generate/WorldviewGenerate.vue'
 import CharacterGenerate from '@/components/generate/CharacterGenerate.vue'
+import OutlineGenerate from '@/components/generate/OutlineGenerate.vue'
 import ChapterGenerate from '@/components/generate/ChapterGenerate.vue'
 import ExtraInfoDisplay from '@/components/ExtraInfoDisplay.vue'
 
@@ -70,21 +78,25 @@ const {
   worldviews,
   characters,
   chapters,
+  outlines,
   loading,
   storyCoresLoading,
   worldviewsLoading,
   charactersLoading,
   chaptersLoading,
+  outlinesLoading,
   novelInfo,
   storyCoreInfo,
   worldviewInfo,
   characterInfo,
   chapterInfo,
+  outlineInfo,
   fetchNovel,
   fetchStoryCores,
   fetchWorldviews,
   fetchCharacters,
   fetchChapters,
+  fetchOutlines,
   fetchAllData,
   fetchRelevantData,
   getFormDefaults
@@ -112,6 +124,9 @@ const handleGenerated = async (type: string, data: any) => {
       break
     case 'character':
       refreshPromises.push(fetchCharacters())
+      break
+    case 'outline':
+      refreshPromises.push(fetchOutlines())
       break
     case 'chapter':
       refreshPromises.push(fetchChapters())

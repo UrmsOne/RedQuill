@@ -45,7 +45,7 @@
               </a-button>
             </template>
             
-            <div v-if="storyCores.length === 0" class="empty-state">
+            <div v-if="!storyCores || storyCores.length === 0" class="empty-state">
               <a-empty description="暂无故事核心" />
             </div>
             
@@ -78,7 +78,7 @@
               </a-button>
             </template>
             
-            <div v-if="worldviews.length === 0" class="empty-state">
+            <div v-if="!worldviews || worldviews.length === 0" class="empty-state">
               <a-empty description="暂无世界观" />
             </div>
             
@@ -100,7 +100,44 @@
       </a-row>
       
       <a-row :gutter="24" style="margin-top: 24px">
-        <a-col :span="12">
+        <a-col :span="8">
+          <a-card title="大纲列表" class="content-card">
+            <template #extra>
+              <a-button type="primary" @click="generateOutline">
+                生成大纲
+              </a-button>
+            </template>
+            
+            <div v-if="!outlines || outlines.length === 0" class="empty-state">
+              <a-empty description="暂无大纲" />
+            </div>
+            
+            <div v-else>
+              <a-list
+                :data-source="outlines"
+                item-layout="vertical"
+              >
+                <template #renderItem="{ item }">
+                  <a-list-item>
+                    <a-list-item-meta
+                      :title="item.title"
+                      :description="item.summary"
+                    />
+                    <template #actions>
+                      <a @click="viewOutline(item)">查看详情</a>
+                    </template>
+                    <div class="outline-meta">
+                      <a-tag color="blue">{{ item.chapters?.length || 0 }}章</a-tag>
+                      <a-tag color="green">{{ item.story_arcs?.length || 0 }}个弧线</a-tag>
+                    </div>
+                  </a-list-item>
+                </template>
+              </a-list>
+            </div>
+          </a-card>
+        </a-col>
+        
+        <a-col :span="8">
           <a-card title="角色列表" class="content-card">
             <template #extra>
               <a-button type="primary" @click="generateCharacter">
@@ -108,7 +145,7 @@
               </a-button>
             </template>
             
-            <div v-if="characters.length === 0" class="empty-state">
+            <div v-if="!characters || characters.length === 0" class="empty-state">
               <a-empty description="暂无角色" />
             </div>
             
@@ -133,7 +170,7 @@
           </a-card>
         </a-col>
         
-        <a-col :span="12">
+        <a-col :span="8">
           <a-card title="章节列表" class="content-card">
             <template #extra>
               <a-button type="primary" @click="generateChapter">
@@ -141,7 +178,7 @@
               </a-button>
             </template>
             
-            <div v-if="chapters.length === 0" class="empty-state">
+            <div v-if="!chapters || chapters.length === 0" class="empty-state">
               <a-empty description="暂无章节" />
             </div>
             
@@ -174,7 +211,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { useNovelStore } from '@/stores/novel'
-import type { Novel, StoryCore, Worldview, Character, Chapter } from '@/stores/novel'
+import type { Novel, StoryCore, Worldview, Character, Chapter, Outline } from '@/stores/novel'
 
 const route = useRoute()
 const router = useRouter()
@@ -185,6 +222,7 @@ const storyCores = ref<StoryCore[]>([])
 const worldviews = ref<Worldview[]>([])
 const characters = ref<Character[]>([])
 const chapters = ref<Chapter[]>([])
+const outlines = ref<Outline[]>([])
 
 const novelId = route.params.id as string
 
@@ -249,6 +287,9 @@ const fetchNovelData = async () => {
     await novelStore.fetchChapters(novelId)
     chapters.value = novelStore.chapters
     
+    await novelStore.fetchOutlines(novelId)
+    outlines.value = novelStore.outlines
+    
   } catch (error) {
     message.error('获取小说数据失败')
   }
@@ -270,6 +311,10 @@ const generateWorldview = () => {
   router.push(`/app/novel/${novelId}/generate?type=worldview`)
 }
 
+const generateOutline = () => {
+  router.push(`/app/novel/${novelId}/generate?type=outline`)
+}
+
 const generateCharacter = () => {
   router.push(`/app/novel/${novelId}/generate?type=character`)
 }
@@ -280,6 +325,10 @@ const generateChapter = () => {
 
 const viewStoryCore = (storyCore: StoryCore) => {
   message.info('查看故事核心详情')
+}
+
+const viewOutline = (outline: Outline) => {
+  message.info('查看大纲详情')
 }
 
 const viewCharacter = (character: Character) => {
@@ -307,5 +356,13 @@ onMounted(() => {
 .empty-state {
   padding: 40px 0;
   text-align: center;
+}
+
+.outline-meta {
+  margin-top: 8px;
+}
+
+.outline-meta .ant-tag {
+  margin-right: 8px;
 }
 </style>

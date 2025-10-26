@@ -194,3 +194,38 @@ type SessionContext struct {
 	CurrentArc       string   `json:"current_arc" bson:"current_arc"`
 	PendingConflicts []string `json:"pending_conflicts" bson:"pending_conflicts"`
 }
+
+// Outline 大纲
+type Outline struct {
+	ID           string        `json:"id" bson:"_id,omitempty"`
+	NovelID      string        `json:"novel_id" bson:"novel_id"`
+	Title        string        `json:"title" bson:"title"`
+	Summary      string        `json:"summary" bson:"summary"`
+	Chapters     []ChapterInfo `json:"chapters" bson:"chapters"`
+	StoryArcs    []StoryArc    `json:"story_arcs" bson:"story_arcs"`
+	KeyThemes    []string      `json:"key_themes" bson:"key_themes"`
+	Ctime        int64         `json:"ctime" bson:"ctime"`
+	Mtime        int64         `json:"mtime" bson:"mtime"`
+}
+
+// ChapterInfo 章节信息
+type ChapterInfo struct {
+	ChapterNumber int               `json:"chapter_number" bson:"chapter_number"`
+	Title         string            `json:"title" bson:"title"`
+	Summary       string            `json:"summary" bson:"summary"`
+	KeyEvents     []string          `json:"key_events" bson:"key_events"`
+	Characters    []string          `json:"characters" bson:"characters"`
+	Location      string            `json:"location" bson:"location"`
+	POV           string            `json:"pov" bson:"pov"` // 视角角色
+	WordCount     int               `json:"word_count" bson:"word_count"`
+	Outline       ChapterOutline    `json:"outline" bson:"outline"`
+}
+
+// StoryArc 故事弧线
+type StoryArc struct {
+	Name        string `json:"name" bson:"name"`
+	Description string `json:"description" bson:"description"`
+	StartChapter int   `json:"start_chapter" bson:"start_chapter"`
+	EndChapter   int   `json:"end_chapter" bson:"end_chapter"`
+	Theme       string `json:"theme" bson:"theme"`
+}
