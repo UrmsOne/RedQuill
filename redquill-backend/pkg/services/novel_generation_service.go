@@ -401,6 +401,12 @@ func (s *NovelGenerationService) buildWorldviewContent(worldview models.Worldvie
 	return content
 }
 
+// buildCurrentArcContent 构建当前故事弧线内容文本
+func (s *NovelGenerationService) buildCurrentArcContent(arc models.StoryArc) string {
+	return fmt.Sprintf("- 当前故事弧线：\n  名称：%s\n  描述：%s\n  章节范围：第%d-%d章\n  主题：%s\n",
+		arc.Name, arc.Description, arc.StartChapter, arc.EndChapter, arc.Theme)
+}
+
 // parseCharacterFromMap 从map解析角色数据
 func (s *NovelGenerationService) parseCharacterFromMap(charMap map[string]interface{}) models.Character {
 	// 解析灵魂档案
@@ -452,13 +458,263 @@ func (s *NovelGenerationService) parseCharacterFromMap(charMap map[string]interf
 	}
 }
 
+// PrepareChapterInputData 准备章节生成的输入数据（用于流式和非流式调用）
+func (s *NovelGenerationService) PrepareChapterInputData(ctx context.Context, novelID string, inputData map[string]interface{}) map[string]interface{} {
+	novelService := NewNovelService(s.client, s.dbName)
+	llmInputData := make(map[string]interface{})
+
+	// 获取故事核心
+	storyCores, err := novelService.GetStoryCores(ctx, novelID)
+	if err == nil && len(storyCores) > 0 {
+		storyCore := storyCores[0]
+		llmInputData["novel_title"] = storyCore.Title
+		llmInputData["story_core"] = s.buildStoryCoreContent(storyCore)
+	} else {
+		llmInputData["novel_title"] = ""
+		llmInputData["story_core"] = ""
+	}
+
+	// 获取世界观
+	worldview, err := novelService.GetWorldviews(ctx, novelID)
+	if err == nil {
+		llmInputData["worldview"] = s.buildWorldviewContent(worldview)
+	} else {
+		llmInputData["worldview"] = ""
+	}
+
+	// 处理章节大纲信息（characters_outline）
+	if charactersOutlineData, ok := inputData["characters_outline"]; ok {
+		// 将章节大纲信息转换为文本格式
+		charactersOutlineText := s.buildChapterOutlineContent(charactersOutlineData)
+		llmInputData["characters_outline"] = charactersOutlineText
+	} else {
+		llmInputData["characters_outline"] = ""
+	}
+
+	// 处理其他输入数据
+	if chapterGoal, ok := inputData["chapter_goal"]; ok {
+		llmInputData["chapter_goal"] = chapterGoal
+	} else {
+		llmInputData["chapter_goal"] = ""
+	}
+
+	if previousSummary, ok := inputData["previous_summary"]; ok {
+		llmInputData["previous_summary"] = previousSummary
+	} else {
+		llmInputData["previous_summary"] = ""
+	}
+
+	if plotTemplates, ok := inputData["plot_templates"]; ok {
+		llmInputData["plot_templates"] = plotTemplates
+	} else {
+		llmInputData["plot_templates"] = ""
+	}
+
+	// 处理角色信息
+	if charactersInvolved, ok := inputData["characters_involved"]; ok {
+		if charArray, ok := charactersInvolved.([]interface{}); ok {
+			charactersText := s.buildCharactersFromInput(charArray)
+			llmInputData["characters_involved"] = charactersText
+		} else {
+			llmInputData["characters_involved"] = ""
+		}
+	} else {
+		llmInputData["characters_involved"] = ""
+	}
+
+	// 处理当前故事弧线（如果有大纲）
+	if outlineID, ok := inputData["outline_id"].(string); ok && outlineID != "" {
+		outline, err := novelService.GetOutline(ctx, outlineID)
+		if err == nil {
+			chapterNumber := s.getInt(inputData, "chapter_number")
+			currentArc := s.findCurrentArc(outline.StoryArcs, chapterNumber)
+			if currentArc != nil {
+				llmInputData["current_arc"] = s.buildCurrentArcContent(*currentArc)
+			} else {
+				llmInputData["current_arc"] = ""
+			}
+		} else {
+			llmInputData["current_arc"] = ""
+		}
+	} else {
+		llmInputData["current_arc"] = ""
+	}
+
+	return llmInputData
+}
+
+// buildChapterOutlineContent 构建章节大纲内容文本
+func (s *NovelGenerationService) buildChapterOutlineContent(charactersOutlineData interface{}) string {
+	if charactersOutlineData == nil {
+		return ""
+	}
+
+	// 尝试将数据转换为map
+	var chapterInfo map[string]interface{}
+	if dataMap, ok := charactersOutlineData.(map[string]interface{}); ok {
+		chapterInfo = dataMap
+	} else {
+		return ""
+	}
+
+	content := "- 章节大纲信息：\n"
+	
+	if title, ok := chapterInfo["title"].(string); ok && title != "" {
+		content += fmt.Sprintf("  章节标题：%s\n", title)
+	}
+	
+	if summary, ok := chapterInfo["summary"].(string); ok && summary != "" {
+		content += fmt.Sprintf("  章节概要：%s\n", summary)
+	}
+	
+	if keyEvents, ok := chapterInfo["key_events"].([]interface{}); ok && len(keyEvents) > 0 {
+		events := make([]string, 0, len(keyEvents))
+		for _, event := range keyEvents {
+			if str, ok := event.(string); ok {
+				events = append(events, str)
+			}
+		}
+		if len(events) > 0 {
+			content += fmt.Sprintf("  关键事件：%s\n", strings.Join(events, "、"))
+		}
+	}
+	
+	if characters, ok := chapterInfo["characters"].([]interface{}); ok && len(characters) > 0 {
+		charNames := make([]string, 0, len(characters))
+		for _, char := range characters {
+			if str, ok := char.(string); ok {
+				charNames = append(charNames, str)
+			}
+		}
+		if len(charNames) > 0 {
+			content += fmt.Sprintf("  涉及角色：%s\n", strings.Join(charNames, "、"))
+		}
+	}
+	
+	if location, ok := chapterInfo["location"].(string); ok && location != "" {
+		content += fmt.Sprintf("  场景地点：%s\n", location)
+	}
+	
+	if pov, ok := chapterInfo["pov"].(string); ok && pov != "" {
+		content += fmt.Sprintf("  视角角色：%s\n", pov)
+	}
+	
+	if wordCount, ok := chapterInfo["word_count"].(float64); ok && wordCount > 0 {
+		content += fmt.Sprintf("  目标字数：%.0f\n", wordCount)
+	}
+	
+	// 处理章节大纲（outline字段）
+	if outlineData, ok := chapterInfo["outline"].(map[string]interface{}); ok {
+		if goal, ok := outlineData["goal"].(string); ok && goal != "" {
+			content += fmt.Sprintf("  章节目标：%s\n", goal)
+		}
+		
+		if keyEvents, ok := outlineData["key_events"].([]interface{}); ok && len(keyEvents) > 0 {
+			events := make([]string, 0, len(keyEvents))
+			for _, event := range keyEvents {
+				if str, ok := event.(string); ok {
+					events = append(events, str)
+				}
+			}
+			if len(events) > 0 {
+				content += fmt.Sprintf("  章节关键事件：%s\n", strings.Join(events, "、"))
+			}
+		}
+		
+		if dramaticPoints, ok := outlineData["dramatic_points"].(float64); ok && dramaticPoints > 0 {
+			content += fmt.Sprintf("  戏剧冲突点：%.0f\n", dramaticPoints)
+		}
+	}
+
+	return content
+}
+
+// buildCharactersFromInput 从输入的角色数组中构建角色文本
+func (s *NovelGenerationService) buildCharactersFromInput(charactersInvolved []interface{}) string {
+	if len(charactersInvolved) == 0 {
+		return ""
+	}
+
+	content := "- 参与角色：\n"
+	for i, charData := range charactersInvolved {
+		if charMap, ok := charData.(map[string]interface{}); ok {
+			name := s.getString(charMap, "name")
+			if name == "" {
+				continue
+			}
+			
+			content += fmt.Sprintf("  角色%d：%s\n", i+1, name)
+			
+			// 添加灵魂档案信息
+			if soulProfile, ok := charMap["soul_profile"].(map[string]interface{}); ok {
+				if personality, ok := soulProfile["personality"].(map[string]interface{}); ok {
+					if coreTraits, ok := personality["core_traits"].([]interface{}); ok && len(coreTraits) > 0 {
+						traits := make([]string, 0, len(coreTraits))
+						for _, trait := range coreTraits {
+							if str, ok := trait.(string); ok {
+								traits = append(traits, str)
+							}
+						}
+						if len(traits) > 0 {
+							content += fmt.Sprintf("    核心特质：%s\n", strings.Join(traits, "、"))
+						}
+					}
+					if moralCompass, ok := personality["moral_compass"].(string); ok && moralCompass != "" {
+						content += fmt.Sprintf("    道德观：%s\n", moralCompass)
+					}
+				}
+				if motivations, ok := soulProfile["motivations"].(map[string]interface{}); ok {
+					if coreDrive, ok := motivations["core_drive"].(string); ok && coreDrive != "" {
+						content += fmt.Sprintf("    核心驱动力：%s\n", coreDrive)
+					}
+				}
+			}
+			
+			// 添加核心属性
+			if coreAttributes, ok := charMap["core_attributes"].(map[string]interface{}); ok {
+				if cultivationLevel, ok := coreAttributes["cultivation_level"].(string); ok && cultivationLevel != "" {
+					content += fmt.Sprintf("    修炼境界：%s\n", cultivationLevel)
+				}
+				if abilities, ok := coreAttributes["abilities"].([]interface{}); ok && len(abilities) > 0 {
+					abilityStrs := make([]string, 0, len(abilities))
+					for _, ability := range abilities {
+						if str, ok := ability.(string); ok {
+							abilityStrs = append(abilityStrs, str)
+						}
+					}
+					if len(abilityStrs) > 0 {
+						content += fmt.Sprintf("    能力：%s\n", strings.Join(abilityStrs, "、"))
+					}
+				}
+			}
+			
+			content += "\n"
+		}
+	}
+
+	return content
+}
+
+// findCurrentArc 从故事弧线列表中找到当前章节所在的故事弧线
+func (s *NovelGenerationService) findCurrentArc(arcs []models.StoryArc, chapterNumber int) *models.StoryArc {
+	for i := range arcs {
+		if chapterNumber >= arcs[i].StartChapter && chapterNumber <= arcs[i].EndChapter {
+			return &arcs[i]
+		}
+	}
+	return nil
+}
+
 // GenerateChapter 生成章节
 func (s *NovelGenerationService) GenerateChapter(ctx context.Context, novelID, llmModelID string, inputData map[string]interface{}) (models.Chapter, error) {
+	// 处理章节大纲信息（characters_outline）
+	llmInputData := s.PrepareChapterInputData(ctx, novelID, inputData)
+	
 	// 构建输入数据
 	generationReq := models.GenerationRequest{
 		NovelID:      novelID,
 		LLMModelID:   llmModelID,
-		InputData:    inputData,
+		InputData:    llmInputData,
 		TemplateType: "chapter",
 		Stream:       false,
 	}

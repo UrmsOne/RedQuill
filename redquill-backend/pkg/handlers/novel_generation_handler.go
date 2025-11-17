@@ -185,10 +185,17 @@ func GenerateChapterHandler(client *mongo.Client, dbName string) gin.HandlerFunc
 			NovelID    string                 `json:"novel_id" binding:"required"`
 			LLMModelID string                 `json:"llm_model_id" binding:"required"`
 			InputData  map[string]interface{} `json:"input_data" binding:"required"`
+			Stream     bool                   `json:"stream,omitempty"`
 		}
 
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		// 如果请求流式响应
+		if req.Stream {
+			GenerateChapterStreamHandler(client, dbName, req.NovelID, req.LLMModelID, req.InputData)(c)
 			return
 		}
 
@@ -205,6 +212,58 @@ func GenerateChapterHandler(client *mongo.Client, dbName string) gin.HandlerFunc
 		}
 
 		c.JSON(http.StatusCreated, chapter)
+	}
+}
+
+// GenerateChapterStreamHandler 流式生成章节
+func GenerateChapterStreamHandler(client *mongo.Client, dbName string, novelID, llmModelID string, inputData map[string]interface{}) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 设置流式响应头
+		c.Header("Content-Type", "text/event-stream")
+		c.Header("Cache-Control", "no-cache")
+		c.Header("Connection", "keep-alive")
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.Header("Access-Control-Allow-Headers", "Cache-Control")
+
+		// 准备LLM输入数据（处理章节大纲信息等）
+		generationService := services.NewNovelGenerationService(client, dbName)
+		llmInputData := generationService.PrepareChapterInputData(c.Request.Context(), novelID, inputData)
+
+		// 创建流式生成请求
+		generationReq := models.GenerationRequest{
+			NovelID:      novelID,
+			LLMModelID:   llmModelID,
+			InputData:    llmInputData,
+			TemplateType: "chapter",
+			Stream:       true,
+		}
+
+		// 调用流式生成服务
+		templateService := services.NewPromptTemplateService(client, dbName)
+		response, err := templateService.GenerateWithLLMStream(c.Request.Context(), generationReq)
+		if err != nil {
+			c.SSEvent("error", gin.H{"error": err.Error()})
+			return
+		}
+
+		// 发送流式数据
+		for chunk := range response {
+			if chunk.Error != nil {
+				c.SSEvent("error", gin.H{"error": chunk.Error.Error()})
+				return
+			}
+
+			// 发送数据块
+			c.SSEvent("data", gin.H{
+				"content": chunk.Content,
+				"done":    chunk.Done,
+			})
+			c.Writer.Flush()
+
+			if chunk.Done {
+				break
+			}
+		}
 	}
 }
 
@@ -350,12 +409,12 @@ func GenerateCharacterStreamHandler(client *mongo.Client, dbName string, novelID
 func GenerateCharactersFromOutlineHandler(client *mongo.Client, dbName string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
-			NovelID          string                 `json:"novel_id" binding:"required"`
-			LLMModelID       string                 `json:"llm_model_id" binding:"required"`
-			OutlineContent   string                 `json:"outline_content" binding:"required"`
-			StoryCore        string                 `json:"story_core" binding:"required"`
-			Worldview        string                 `json:"worldview" binding:"required"`
-			UserRequirements string                 `json:"user_requirements"`
+			NovelID          string `json:"novel_id" binding:"required"`
+			LLMModelID       string `json:"llm_model_id" binding:"required"`
+			OutlineContent   string `json:"outline_content" binding:"required"`
+			StoryCore        string `json:"story_core" binding:"required"`
+			Worldview        string `json:"worldview" binding:"required"`
+			UserRequirements string `json:"user_requirements"`
 		}
 
 		if err := c.ShouldBindJSON(&req); err != nil {

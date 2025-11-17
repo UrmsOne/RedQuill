@@ -275,23 +275,15 @@ func InitializePromptTemplates(client *mongo.Client, dbName string) error {
 根据章节大纲和目标，生成具体章节内容。
 
 【输入数据】
-{
-  "novel_context": {
-    "story_core": "{story_core}",
-    "worldview": "{worldview}",
-    "current_arc": "{current_arc}"
-  },
-  "chapter_goal": "{chapter_goal}",
-  "characters_involved": [
-    {
-      "soul_profile": "{character_soul_profile}",
-      "core_attributes": "{character_core_attributes}",
-      "current_state": "{character_current_state}"
-    }
-  ],
-  "previous_summary": "{previous_summary}",
-  "plot_templates": ["{plot_template1}", "{plot_template2}"]
-}
+- 小说标题：{novel_title}
+- 故事核心：{story_core}
+- 世界观：{worldview}
+- 当前故事弧线：{current_arc}
+- 章节目标：{chapter_goal}
+- 参与角色：{characters_involved}
+- 章节大纲信息：{characters_outline}
+- 前情提要：{previous_summary}
+- 情节模板：{plot_templates}
 
 【输出要求】
 请先输出章节元数据JSON，然后输出正文内容：
@@ -312,12 +304,18 @@ func InitializePromptTemplates(client *mongo.Client, dbName string) error {
     "score": 8,
     "strengths": ["优点1", "优点2"],
     "improvement_areas": ["待改进领域1", "待改进领域2"]
-  }
+  },
+  "character_development": {
+    "角色名1": "在本章中的成长变化",
+    "角色名2": "在本章中的成长变化"
+  },
+  "plot_advancements": ["剧情推进点1", "剧情推进点2"],
+  "next_chapter_hook": "为下一章埋下的钩子"
 }
 
 【正文开始】
-（此处生成2000字左右的章节正文内容）`,
-			Variables:  []string{"novel_title", "story_core", "worldview", "current_arc", "chapter_goal", "characters_involved", "previous_summary", "plot_templates"},
+（此处生成2000字左右的章节正文内容，人物）`,
+			Variables:  []string{"novel_title", "story_core", "worldview", "current_arc", "chapter_goal", "characters_involved", "characters_outline", "previous_summary", "plot_templates"},
 			UsageCount: 0,
 			CreatorID:  "system",
 			Creator:    "system",
