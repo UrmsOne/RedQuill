@@ -1,11 +1,49 @@
 # 开发笔记记录常见问题
 ## 前端
+### 开发指南
+### 添加新页面
+
+1. 在 `src/views/` 创建 Vue 组件
+2. 在 `src/router/index.ts` 添加路由
+3. 在 `src/components/Layout.vue` 添加导航菜单
+
+### 添加新 API
+
+1. 在 `src/utils/api.ts` 添加 API 方法
+2. 在对应的 store 中添加状态管理
+3. 在组件中调用 API
+
+### 状态管理
+
+使用 Pinia 进行状态管理：
+
+```typescript
+// stores/example.ts
+import { defineStore } from 'pinia'
+
+export const useExampleStore = defineStore('example', () => {
+  const data = ref([])
+  const loading = ref(false)
+  
+  const fetchData = async () => {
+    // 获取数据逻辑
+  }
+  
+  return {
+    data,
+    loading,
+    fetchData
+  }
+})
+```
+
 
 ## 后端
 - 后端满足restful风格的设计，每种用户资源（数据模型），默认有两个属性参数，ctime(创建时间)、mtime(修改时间)；ctime和mtime为时间戳；
 - 用户模型存放在pkg/models；业务逻辑在pkg/services；pkg/handlers为路由函数，主要作用为参数校验，权限控制等。pkg/routes为路由与路由函数的映射
 - 当开发新功能时，先生成models，在写对应的services、再写对应的handlers、再更新routes。
 - 中间件存放在pkg/middleware文件夹；pkg/config配置文件相关；pkg/common存放公共功能的代码；pkg/cmd为入口文件
+- post/put方法的请求和响应的结构体，可以在models/xxx_model.go里面定义
 
 ### 接口设计规范
 案例如下：
@@ -56,6 +94,11 @@ services命名：
 /*/
 
 ```
+
+pkg/models文件夹下的文件命名规范：`xxx_model.go`
+pkg/services文件夹下的文件命名规范：`xxx_service.go`
+pkg/handlers：`xxx_handler.go`
+
 ### 新功能开发规范
 - 开发业务新功能时，需要提供上述给出的完整接口设计和实现。命名规范，代码规范遵守上述要求。
 - 通用组件开发时，命名规范，代码规范遵守上述要求，相关文件要放置到指定的文件夹下
